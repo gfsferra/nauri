@@ -1,0 +1,9 @@
+# Copie para .dev.vars (que está no .gitignore) e preencha.
+DATABASE_URL="postgresql://usuario:senha@ep-xxx.sa-east-1.aws.neon.tech/financas?sslmode=require"
+BETTER_AUTH_SECRET="gere-com: openssl rand -base64 32"
+BETTER_AUTH_URL="http://localhost:8787"
+APP_URL="http://localhost:8081"
+RESEND_API_KEY="re_xxxxxxxx"
+MAIL_FROM="Finanças <nao-responda@seudominio.com>"
+SIGNUP_MODE="invite"
+INVITE_CODE="escolha-um-codigo"

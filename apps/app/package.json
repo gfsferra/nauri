@@ -1,0 +1,42 @@
+{
+  "name": "@financas/app",
+  "version": "1.0.0",
+  "main": "expo-router/entry",
+  "dependencies": {
+    "@better-auth/expo": "^1.7.2",
+    "@expo/vector-icons": "^15.0.2",
+    "@financas/contracts": "^0.0.0",
+    "@tanstack/react-query": "^5.102.8",
+    "better-auth": "^1.7.2",
+    "expo": "~57.0.18",
+    "expo-constants": "~57.0.16",
+    "expo-document-picker": "~57.0.1",
+    "expo-file-system": "~57.0.6",
+    "expo-linking": "~57.0.8",
+    "expo-router": "~57.0.17",
+    "expo-secure-store": "~57.0.2",
+    "expo-status-bar": "~57.0.1",
+    "papaparse": "^5.7.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-svg": "15.15.4",
+    "react-native-web": "^0.21.2"
+  },
+  "devDependencies": {
+    "@types/papaparse": "^5.5.2",
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3",
+    "@financas/api": "*"
+  },
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "build:web": "expo export --platform web",
+    "typecheck": "tsc --noEmit"
+  },
+  "private": true
+}
