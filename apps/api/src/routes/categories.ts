@@ -1,5 +1,5 @@
 import { zValidator } from '@hono/zod-validator'
-import { categoryCreateSchema, categoryUpdateSchema } from '@financas/contracts'
+import { categoryCreateSchema, categoryUpdateSchema } from '@orbital/contracts'
 import { and, asc, eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { z } from 'zod'

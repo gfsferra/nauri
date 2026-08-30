@@ -1,4 +1,4 @@
-# Finanças
+# Orbital
 
 Controle financeiro pessoal: um app que roda no iPhone, no Android e no navegador,
 servidos pela mesma API headless.
@@ -61,7 +61,7 @@ EXPO_PUBLIC_API_URL=http://localhost:8787
 
 ```bash
 npm install
-DATABASE_URL="sua-url" npm run db:migrate --workspace @financas/api
+DATABASE_URL="sua-url" npm run db:migrate --workspace @orbital/api
 
 npm run dev:api    # API em http://localhost:8787
 npm run dev:app    # Expo: aperte 'w' para web, ou leia o QR no Expo Go

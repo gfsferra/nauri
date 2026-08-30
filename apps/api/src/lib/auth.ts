@@ -93,7 +93,7 @@ export function createAuth(db: Db, env: Env) {
     // O app nativo não tem cookie jar: manda a sessão no header Authorization.
     plugins: [
       bearer(),
-      // Libera o deep link financas:// como origem confiável do app nativo.
+      // Libera o deep link orbital:// como origem confiável do app nativo.
       expo(),
     ],
   })

@@ -1,5 +1,5 @@
 {
-  "name": "@financas/api",
+  "name": "@orbital/api",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@better-auth/expo": "^1.7.2",
-    "@financas/contracts": "*",
+    "@orbital/contracts": "*",
     "@hono/zod-validator": "^0.9.0",
     "@neondatabase/serverless": "^1.1.0",
     "better-auth": "^1.7.2",

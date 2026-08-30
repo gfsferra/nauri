@@ -21,7 +21,7 @@ export const authClient = createAuthClient({
       : [
           expoClient({
             scheme: APP_SCHEME,
-            storagePrefix: 'financas',
+            storagePrefix: 'orbital',
             storage: SecureStore,
           }),
         ],

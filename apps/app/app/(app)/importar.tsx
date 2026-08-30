@@ -4,17 +4,29 @@ import {
   type ColumnMap,
   type SheetMapping,
   type SheetResult,
-} from '@financas/contracts'
+} from '@orbital/contracts'
 import { useMutation } from '@tanstack/react-query'
 import * as DocumentPicker from 'expo-document-picker'
 import Papa from 'papaparse'
 import { useMemo, useState } from 'react'
+import { Ionicons } from '@expo/vector-icons'
 import { Pressable, ScrollView, Text, View } from 'react-native'
-import { Button, Card, ErrorBanner, Muted, Screen, Title } from '@/components/ui'
+import {
+  Button,
+  Card,
+  Chip,
+  ErrorBanner,
+  Gutter,
+  Muted,
+  Screen,
+  SectionLabel,
+  StatTile,
+  Title,
+} from '@/components/ui'
 import { client, unwrap } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
 import { readFileAsText } from '@/lib/read-file'
-import { radius, spacing, useTheme } from '@/lib/theme'
+import { radius, spacing, tabular, type, useTheme } from '@/lib/theme'
 
 /** A API aceita 500 linhas por requisição; anos de planilha passam disso. */
 const BATCH = 500
@@ -108,20 +120,34 @@ export default function Importar() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ padding: spacing.md, gap: spacing.lg }}>
-        <View style={{ gap: spacing.xs }}>
-          <Title>Importar planilha</Title>
-          <Muted>
-            Exporte sua planilha como CSV. Nada é enviado antes de você conferir o preview.
-          </Muted>
-        </View>
+      <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }}>
+        <Gutter style={{ gap: spacing.xl }}>
+          <View style={{ gap: 6 }}>
+            <Title>Importar planilha</Title>
+            <Muted>
+              Exporte sua planilha como CSV. Nada é enviado antes de você conferir o preview.
+            </Muted>
+          </View>
 
-        <ErrorBanner message={error} />
+          <ErrorBanner message={error} />
 
         {done ? (
-          <Card style={{ gap: spacing.sm }}>
-            <Text style={{ fontSize: 32 }}>✅</Text>
-            <Text style={{ color: theme.text, fontSize: 17, fontWeight: '600' }}>
+          /* A confirmação do DS: disco em accentSoft com o traço em destaque,
+             sem emoji e com o texto rente à esquerda. */
+          <Card style={{ gap: spacing.md }}>
+            <View
+              style={{
+                width: 76,
+                height: 76,
+                borderRadius: radius.full,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: theme.accentSoft,
+              }}
+            >
+              <Ionicons name="checkmark" size={36} color={theme.accent} />
+            </View>
+            <Text style={{ ...type.heading, color: theme.text }}>
               {done.inserted} lançamento{done.inserted === 1 ? '' : 's'} importado
               {done.inserted === 1 ? '' : 's'}
             </Text>
@@ -155,25 +181,26 @@ export default function Importar() {
 
         {preview && !done && (
           <Card style={{ gap: spacing.md }}>
-            <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>Preview</Text>
+            <Text style={{ ...type.section, color: theme.text }}>Preview</Text>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <View>
-                <Muted>Gastos</Muted>
-                <Text style={{ color: theme.expense, fontWeight: '600' }}>
-                  {formatBRL(totals?.expense ?? 0)}
+            {/* As caixas de número do DS. Saída em tinta neutra e entrada no
+                verde profundo — o sinal é que separa os dois, não a cor. */}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <StatTile label="Gastos">
+                <Text style={{ ...type.amount, ...tabular, fontSize: 16, color: theme.text }}>
+                  − {formatBRL(totals?.expense ?? 0)}
                 </Text>
-              </View>
-              <View>
-                <Muted>Ganhos</Muted>
-                <Text style={{ color: theme.income, fontWeight: '600' }}>
-                  {formatBRL(totals?.income ?? 0)}
+              </StatTile>
+              <StatTile label="Ganhos">
+                <Text style={{ ...type.amount, ...tabular, fontSize: 16, color: theme.accentText }}>
+                  + {formatBRL(totals?.income ?? 0)}
                 </Text>
-              </View>
-              <View>
-                <Muted>Linhas</Muted>
-                <Text style={{ color: theme.text, fontWeight: '600' }}>{preview.rows.length}</Text>
-              </View>
+              </StatTile>
+              <StatTile label="Linhas">
+                <Text style={{ ...type.amount, ...tabular, fontSize: 16, color: theme.text }}>
+                  {preview.rows.length}
+                </Text>
+              </StatTile>
             </View>
 
             {/* Confira estes totais contra a própria planilha antes de importar —
@@ -184,7 +211,9 @@ export default function Importar() {
 
             {preview.errors.length > 0 && (
               <View style={{ gap: spacing.xs }}>
-                <Text style={{ color: theme.warning, fontWeight: '600', fontSize: 14 }}>
+                {/* Linha descartada é perda de dado, não gasto normal: aqui o
+                    coral do DS está no seu lugar. */}
+                <Text style={{ ...type.row, fontWeight: '600', color: theme.danger }}>
                   {preview.errors.length} linha(s) serão puladas
                 </Text>
                 {preview.errors.slice(0, 5).map((e, i) => (
@@ -207,6 +236,7 @@ export default function Importar() {
             />
           </Card>
         )}
+        </Gutter>
       </ScrollView>
     </Screen>
   )
@@ -238,9 +268,14 @@ function Block({
   return (
     <Card style={{ gap: spacing.md }}>
       <Pressable onPress={() => onChange(active ? null : { date: '', amount: '', fallbackCategory: fallback })}>
-        <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>
-          {active ? '☑' : '☐'}  {title}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+          <Ionicons
+            name={active ? 'checkbox' : 'square-outline'}
+            size={19}
+            color={active ? theme.accent : theme.text3}
+          />
+          <Text style={{ ...type.section, color: theme.text }}>{title}</Text>
+        </View>
         {subtitle ? <Muted>{subtitle}</Muted> : null}
       </Pressable>
 
@@ -269,10 +304,9 @@ function Picker({
   onSelect: (column: string | undefined) => void
   optional?: boolean
 }) {
-  const theme = useTheme()
   return (
     <View style={{ gap: spacing.xs }}>
-      <Muted>{label}</Muted>
+      <SectionLabel>{label}</SectionLabel>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
         {optional && (
           <Chip label="nenhuma" active={!selected} onPress={() => onSelect(undefined)} />
@@ -287,27 +321,5 @@ function Picker({
         ))}
       </View>
     </View>
-  )
-}
-
-function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  const theme = useTheme()
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="radio"
-      accessibilityState={{ selected: active }}
-      style={{
-        paddingHorizontal: spacing.sm,
-        height: 32,
-        justifyContent: 'center',
-        borderRadius: radius.full,
-        borderWidth: 1,
-        borderColor: active ? theme.accent : theme.border,
-        backgroundColor: active ? theme.accent : 'transparent',
-      }}
-    >
-      <Text style={{ color: active ? theme.accentText : theme.muted, fontSize: 13 }}>{label}</Text>
-    </Pressable>
   )
 }

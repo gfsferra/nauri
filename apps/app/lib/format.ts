@@ -87,3 +87,31 @@ export function monthBounds(month: string): { from: string; to: string } {
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
   return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, '0')}` }
 }
+
+/**
+ * Rótulo de grupo do extrato: o DS agrupa por dia e chama os dois primeiros de
+ * 'Hoje' e 'Ontem' — a data por extenso só aparece a partir do terceiro.
+ */
+export function relativeDay(iso: string, reference = today()): string {
+  if (iso === reference) return 'Hoje'
+  const [y, m, d] = reference.split('-').map(Number) as [number, number, number]
+  const previous = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10)
+  return iso === previous ? 'Ontem' : formatDate(iso)
+}
+
+/**
+ * Tom da inicial na lista. O DS não usa cor de categoria: escolhe um degrau da
+ * rampa slate. O índice sai do próprio nome para a categoria não trocar de tom
+ * a cada render.
+ */
+export function toneOf(text: string): number {
+  let hash = 0
+  for (let i = 0; i < text.length; i++) hash = (hash * 31 + text.charCodeAt(i)) | 0
+  return Math.abs(hash)
+}
+
+/** Variação percentual entre dois meses, para a pílula de tendência do DS. */
+export function percentDelta(current: number, previous: number): number | null {
+  if (previous === 0) return null
+  return ((current - previous) / Math.abs(previous)) * 100
+}

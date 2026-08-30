@@ -3,18 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native'
-import { Button, Card, ErrorBanner, Muted, Screen, Title } from '@/components/ui'
+import { Button, Chip, ErrorBanner, Gutter, Screen, SectionLabel, Title } from '@/components/ui'
 import { client, unwrap } from '@/lib/api'
-import { formatCents, formatDate, today } from '@/lib/format'
-import { radius, spacing, useTheme } from '@/lib/theme'
+import { formatCents, formatDate, popDigit, pushDigit, today } from '@/lib/format'
+import { radius, spacing, tabular, type, useTheme } from '@/lib/theme'
 
-type Category = {
-  id: string
-  name: string
-  kind: 'expense' | 'income'
-  color: string
-  isArchived: boolean
-}
+/** As doze teclas do artboard, na mesma ordem. */
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', '⌫'] as const
 
 function shiftDate(iso: string, days: number): string {
   const [y, m, d] = iso.split('-').map(Number) as [number, number, number]
@@ -72,118 +67,115 @@ export default function Novo() {
 
   const canSave = cents > 0 && categoryId !== null
 
+  function press(key: string) {
+    if (key === '⌫') return setCents(popDigit(cents))
+    setCents(key.split('').reduce((value, digit) => pushDigit(value, digit), cents))
+  }
+
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ padding: spacing.md, gap: spacing.lg }}>
-        <Title>Novo lançamento</Title>
+      <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl, gap: spacing.xl }}>
+        <Gutter style={{ gap: spacing.lg }}>
+          <Title>Novo lançamento</Title>
 
-        {/* Gasto ou ganho — o que na planilha era escolher a coluna A ou B. */}
-        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-          {(['expense', 'income'] as const).map((option) => {
-            const active = kind === option
-            const color = option === 'expense' ? theme.expense : theme.income
-            return (
-              <Pressable
+          {/*
+            Gasto ou ganho. Os dois usam o mesmo destaque quando escolhidos: o
+            DS reserva o coral a ação destrutiva, e gasto normal não é erro
+            (decisão 01). Quem diz qual é qual é o próprio rótulo.
+          */}
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            {(['expense', 'income'] as const).map((option) => (
+              <Chip
                 key={option}
+                label={option === 'expense' ? 'Gasto' : 'Ganho'}
+                active={kind === option}
                 onPress={() => {
                   setKind(option)
                   setCategoryId(null) // categoria de gasto não serve para ganho
                 }}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: active }}
-                style={{
-                  flex: 1,
-                  height: 44,
-                  borderRadius: radius.md,
-                  borderWidth: 1,
-                  borderColor: active ? color : theme.border,
-                  backgroundColor: active ? `${color}18` : 'transparent',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Text style={{ color: active ? color : theme.muted, fontWeight: '600' }}>
-                  {option === 'expense' ? 'Gasto' : 'Ganho'}
-                </Text>
-              </Pressable>
-            )
-          })}
-        </View>
+                leading={
+                  <Ionicons
+                    name={option === 'expense' ? 'arrow-up-outline' : 'arrow-down-outline'}
+                    size={15}
+                    color={kind === option ? theme.accentText : theme.text3}
+                  />
+                }
+              />
+            ))}
+          </View>
+        </Gutter>
 
         {/*
-          Máscara de moeda: os dígitos entram pela direita, como numa maquininha.
-          O usuário nunca digita a vírgula — o que elimina o erro de lançar
-          R$ 1.000,00 no lugar de R$ 10,00 por causa do separador do teclado.
+          O valor no tamanho de manchete do DS, alinhado à esquerda, com o
+          teclado próprio logo abaixo. Os dígitos entram pela direita, como numa
+          maquininha: o usuário nunca digita a vírgula, o que elimina o erro de
+          lançar R$ 1.000,00 no lugar de R$ 10,00 por causa do separador do
+          teclado do aparelho.
         */}
-        <Card style={{ alignItems: 'center', paddingVertical: spacing.lg }}>
-          <Muted>Valor</Muted>
-          <TextInput
-            value={formatCents(cents)}
-            onChangeText={(text) => {
-              const digits = text.replace(/\D/g, '')
-              setCents(Math.min(Number(digits || '0'), 1_000_000_000_000))
-            }}
-            keyboardType="number-pad"
-            inputMode="numeric"
-            selectTextOnFocus
-            accessibilityLabel="Valor em reais"
-            style={{
-              color: kind === 'expense' ? theme.expense : theme.income,
-              fontSize: 40,
-              fontWeight: '700',
-              textAlign: 'center',
-              minWidth: 200,
-            }}
-          />
-          <Muted>R$</Muted>
-        </Card>
+        <Gutter>
+          <Text style={{ ...type.body, color: theme.text2 }}>
+            Valor do {kind === 'expense' ? 'gasto' : 'ganho'}
+          </Text>
+          <Text
+            accessibilityLabel={`Valor: ${formatCents(cents)} reais`}
+            style={[
+              type.keypad,
+              tabular,
+              { color: cents > 0 ? theme.text : theme.text3, marginTop: 6 },
+            ]}
+          >
+            R$ {formatCents(cents)}
+          </Text>
+        </Gutter>
 
-        <View style={{ gap: spacing.sm }}>
-          <Muted>Categoria</Muted>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-            {visible.map((category) => {
-              const active = categoryId === category.id
-              return (
-                <Pressable
-                  key={category.id}
-                  onPress={() => setCategoryId(category.id)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: active }}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 6,
-                    paddingHorizontal: spacing.md,
-                    height: 38,
-                    borderRadius: radius.full,
-                    borderWidth: 1,
-                    borderColor: active ? category.color : theme.border,
-                    backgroundColor: active ? `${category.color}22` : theme.card,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: radius.full,
-                      backgroundColor: category.color,
-                    }}
-                  />
-                  <Text style={{ color: theme.text, fontSize: 14 }}>{category.name}</Text>
-                </Pressable>
-              )
-            })}
-          </View>
+        <View style={styles.keypad}>
+          {KEYS.map((key) => (
+            <Pressable
+              key={key}
+              onPress={() => press(key)}
+              accessibilityRole="button"
+              accessibilityLabel={key === '⌫' ? 'Apagar último dígito' : key}
+              style={({ pressed }) => [
+                styles.key,
+                { backgroundColor: pressed ? theme.surface2 : 'transparent' },
+              ]}
+            >
+              <Text style={{ fontSize: 23, fontWeight: '500', color: theme.text }}>{key}</Text>
+            </Pressable>
+          ))}
         </View>
 
-        <View style={{ gap: spacing.sm }}>
-          <Muted>Data</Muted>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+        <Gutter style={{ gap: spacing.md }}>
+          <SectionLabel>Categoria</SectionLabel>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+            {visible.map((category) => (
+              <Chip
+                key={category.id}
+                label={category.name}
+                active={categoryId === category.id}
+                onPress={() => setCategoryId(category.id)}
+              />
+            ))}
+          </View>
+        </Gutter>
+
+        <Gutter style={{ gap: spacing.md }}>
+          <SectionLabel>Data</SectionLabel>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              minHeight: 48,
+              paddingHorizontal: 14,
+              borderRadius: radius.md,
+              backgroundColor: theme.surface2,
+            }}
+          >
             <Pressable onPress={() => setOccurredOn(shiftDate(occurredOn, -1))} hitSlop={10} accessibilityLabel="Dia anterior">
-              <Ionicons name="chevron-back" size={22} color={theme.muted} />
+              <Ionicons name="chevron-back" size={20} color={theme.text2} />
             </Pressable>
             <Pressable onPress={() => setOccurredOn(today())} style={{ flex: 1 }}>
-              <Text style={{ color: theme.text, fontSize: 15, textAlign: 'center', fontWeight: '500' }}>
+              <Text style={{ ...type.row, color: theme.text, textAlign: 'center' }}>
                 {occurredOn === today() ? 'Hoje' : formatDate(occurredOn)}
               </Text>
             </Pressable>
@@ -194,46 +186,67 @@ export default function Novo() {
             >
               <Ionicons
                 name="chevron-forward"
-                size={22}
+                size={20}
                 // Lançar no futuro é quase sempre engano de digitação; para isso
                 // existem os recorrentes.
-                color={occurredOn < today() ? theme.muted : theme.border}
+                color={occurredOn < today() ? theme.text2 : theme.border}
               />
             </Pressable>
           </View>
-        </View>
+        </Gutter>
 
-        <View style={{ gap: spacing.sm }}>
-          <Muted>Descrição (opcional)</Muted>
+        <Gutter style={{ gap: spacing.md }}>
+          <SectionLabel>Descrição (opcional)</SectionLabel>
           <TextInput
             value={description}
             onChangeText={setDescription}
             placeholder="Feira da semana"
-            placeholderTextColor={theme.muted}
+            placeholderTextColor={theme.text3}
             maxLength={200}
             style={{
-              height: 52,
+              minHeight: 48,
               borderRadius: radius.md,
-              paddingHorizontal: spacing.md,
-              backgroundColor: theme.inputBg,
+              borderWidth: 1,
+              borderColor: theme.border,
+              paddingHorizontal: 14,
+              backgroundColor: theme.surface2,
               color: theme.text,
-              fontSize: 16,
+              fontSize: 14.5,
+              letterSpacing: -0.2,
             }}
           />
-        </View>
+        </Gutter>
 
-        <ErrorBanner message={error} />
-
-        <Button
-          label="Salvar lançamento"
-          onPress={() => {
-            setError(null)
-            create.mutate()
-          }}
-          loading={create.isPending}
-          disabled={!canSave}
-        />
+        <Gutter style={{ gap: spacing.md }}>
+          <ErrorBanner message={error} />
+          <Button
+            label="Salvar lançamento"
+            onPress={() => {
+              setError(null)
+              create.mutate()
+            }}
+            loading={create.isPending}
+            disabled={!canSave}
+            icon={<Ionicons name="checkmark" size={17} color="#FFFFFF" />}
+          />
+        </Gutter>
       </ScrollView>
     </Screen>
   )
 }
+
+const styles = {
+  keypad: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: spacing.md,
+  },
+  /** Grade de 3 colunas, teclas de 56px e canto 16 — a do artboard. */
+  key: {
+    width: '33.333%',
+    minHeight: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.lg,
+  },
+} as const

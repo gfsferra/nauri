@@ -1,9 +1,20 @@
+import { Ionicons } from '@expo/vector-icons'
 import { Link, useRouter } from 'expo-router'
 import { useState } from 'react'
 import { KeyboardAvoidingView, Platform, Text, View } from 'react-native'
-import { Button, ErrorBanner, Field, Muted, Screen, Title } from '@/components/ui'
+import {
+  BrandMark,
+  Button,
+  ErrorBanner,
+  Field,
+  Gutter,
+  Muted,
+  Screen,
+  Title,
+  TrustNote,
+} from '@/components/ui'
 import { signIn } from '@/lib/auth-client'
-import { spacing, useTheme } from '@/lib/theme'
+import { spacing, type, useTheme } from '@/lib/theme'
 
 export default function Entrar() {
   const theme = useTheme()
@@ -36,50 +47,64 @@ export default function Entrar() {
     <Screen>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1, justifyContent: 'center', padding: spacing.lg, gap: spacing.lg }}
+        style={{ flex: 1, justifyContent: 'center' }}
       >
-        <View style={{ gap: spacing.xs }}>
-          <Title>Entrar</Title>
-          <Muted>Suas finanças, no bolso e no navegador.</Muted>
-        </View>
+        {/* Tudo rente à esquerda: o DS não centraliza título nem rótulo. */}
+        <Gutter style={{ gap: spacing.xxl }}>
+          <View style={{ gap: spacing.lg }}>
+            <BrandMark>
+              <Ionicons name="wallet-outline" size={22} color="#F8FAFC" />
+            </BrandMark>
+            <View style={{ gap: 6 }}>
+              <Title>Entrar</Title>
+              <Muted>Suas finanças, no bolso e no navegador.</Muted>
+            </View>
+          </View>
 
-        <View style={{ gap: spacing.md }}>
-          <ErrorBanner message={error} />
+          <View style={{ gap: spacing.lg }}>
+            <ErrorBanner message={error} />
 
-          <Field
-            label="E-mail"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            autoComplete="email"
-            keyboardType="email-address"
-            inputMode="email"
-            placeholder="voce@exemplo.com"
-          />
-          <Field
-            label="Senha"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoComplete="current-password"
-            onSubmitEditing={handleSubmit}
-            returnKeyType="go"
-            placeholder="••••••••••"
-          />
+            <Field
+              label="E-mail"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              autoComplete="email"
+              keyboardType="email-address"
+              inputMode="email"
+              placeholder="voce@exemplo.com"
+            />
+            <Field
+              label="Senha"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="current-password"
+              onSubmitEditing={handleSubmit}
+              returnKeyType="go"
+              placeholder="••••••••••"
+            />
 
-          <Button label="Entrar" onPress={handleSubmit} loading={loading} disabled={!email || !password} />
-        </View>
+            <Button label="Entrar" onPress={handleSubmit} loading={loading} disabled={!email || !password} />
+          </View>
 
-        <View style={{ gap: spacing.sm, alignItems: 'center' }}>
-          <Link href="/esqueci-senha">
-            <Text style={{ color: theme.muted, fontSize: 14 }}>Esqueci minha senha</Text>
-          </Link>
-          <Link href="/cadastrar">
-            <Text style={{ color: theme.text, fontSize: 14, fontWeight: '600' }}>
-              Criar uma conta
-            </Text>
-          </Link>
-        </View>
+          <View style={{ gap: spacing.md }}>
+            <Link href="/esqueci-senha">
+              <Text style={{ ...type.body, fontWeight: '600', color: theme.text2 }}>
+                Esqueci minha senha
+              </Text>
+            </Link>
+            <Link href="/cadastrar">
+              <Text style={{ ...type.body, fontWeight: '600', color: theme.accentText }}>
+                Criar uma conta
+              </Text>
+            </Link>
+          </View>
+
+          <TrustNote icon={<Ionicons name="lock-closed-outline" size={13} color={theme.text3} />}>
+            Conexão criptografada ponta a ponta
+          </TrustNote>
+        </Gutter>
       </KeyboardAvoidingView>
     </Screen>
   )
