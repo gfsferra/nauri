@@ -4,7 +4,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { budgets, categories, recurrences, transactions, user } from '../db/schema.js'
 import type { AppContext } from '../env.js'
-import { centsToDecimalString } from '@orbital/contracts'
+import { centsToDecimalString } from '@nauri/contracts'
 import { requireAuth } from '../middleware.js'
 
 /**
@@ -57,7 +57,7 @@ export const accountRoute = new Hono<AppContext>()
         return new Response(header + body, {
           headers: {
             'Content-Type': 'text/csv; charset=utf-8',
-            'Content-Disposition': 'attachment; filename="orbital.csv"',
+            'Content-Disposition': 'attachment; filename="nauri.csv"',
           },
         })
       }

@@ -1,5 +1,5 @@
 {
-  "name": "orbital",
+  "name": "nauri",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
   "scripts": {
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "dev:api": "npm run dev --workspace @orbital/api",
-    "dev:app": "npm run start --workspace @orbital/app"
+    "dev:api": "npm run dev --workspace @nauri/api",
+    "dev:app": "npm run start --workspace @nauri/app"
   }
 }

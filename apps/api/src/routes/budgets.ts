@@ -1,12 +1,12 @@
 import { zValidator } from '@hono/zod-validator'
-import { budgetUpsertSchema } from '@orbital/contracts'
+import { budgetUpsertSchema } from '@nauri/contracts'
 import { and, eq, gte, lte, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { budgets, categories, transactions } from '../db/schema.js'
 import type { AppContext } from '../env.js'
 import { toCents } from '../lib/cents.js'
-import { monthBounds } from '@orbital/contracts'
+import { monthBounds } from '@nauri/contracts'
 import { requireAuth } from '../middleware.js'
 
 const monthQuery = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) })

@@ -1,5 +1,5 @@
 import { zValidator } from '@hono/zod-validator'
-import { importCommitSchema } from '@orbital/contracts'
+import { importCommitSchema } from '@nauri/contracts'
 import { and, eq, gte, inArray, lte } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { categories, transactions } from '../db/schema.js'

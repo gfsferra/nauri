@@ -17,7 +17,7 @@ import {
   toMonth,
   weekdayOf,
   type IsoDate,
-} from '@orbital/contracts'
+} from '@nauri/contracts'
 
 export type RecurrenceSpec = {
   frequency: 'monthly' | 'weekly' | 'yearly'
@@ -103,7 +103,7 @@ export function occurrencesBetween(
 
 /**
  * Confere se os campos batem com a frequência antes de gravar.
- * A união discriminada em `@orbital/contracts` já barra a maioria dos casos na
+ * A união discriminada em `@nauri/contracts` já barra a maioria dos casos na
  * borda da API; isto protege o que vier de migração ou de escrita direta.
  */
 export function validateSpec(spec: RecurrenceSpec): string | null {
