@@ -12,6 +12,7 @@ import { useMemo, useState } from 'react'
 import { Ionicons } from '@expo/vector-icons'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import {
+  Amount,
   Button,
   Card,
   Chip,
@@ -187,14 +188,10 @@ export default function Importar() {
                 verde profundo — o sinal é que separa os dois, não a cor. */}
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <StatTile label="Gastos">
-                <Text style={{ ...type.amount, ...tabular, fontSize: 16, color: theme.text }}>
-                  − {formatBRL(totals?.expense ?? 0)}
-                </Text>
+                <Amount cents={totals?.expense ?? 0} direction="out" format={formatBRL} size={16} />
               </StatTile>
               <StatTile label="Ganhos">
-                <Text style={{ ...type.amount, ...tabular, fontSize: 16, color: theme.accentText }}>
-                  + {formatBRL(totals?.income ?? 0)}
-                </Text>
+                <Amount cents={totals?.income ?? 0} direction="in" format={formatBRL} size={16} />
               </StatTile>
               <StatTile label="Linhas">
                 <Text style={{ ...type.amount, ...tabular, fontSize: 16, color: theme.text }}>

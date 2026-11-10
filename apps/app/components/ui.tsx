@@ -368,7 +368,7 @@ export function Chip({
     <Pressable
       onPress={onPress}
       accessibilityRole={accessibilityRole}
-      accessibilityState={{ selected: active }}
+      accessibilityState={accessibilityRole === 'radio' ? { selected: active } : undefined}
       style={({ pressed }) => [
         styles.chip,
         {

@@ -121,7 +121,11 @@ export default function Lancamentos() {
         keyExtractor={(item) => item.id}
         stickySectionHeadersEnabled={false}
         refreshing={list.isRefetching}
-        onRefresh={() => list.refetch()}
+        onRefresh={() => {
+          list.refetch()
+          summary.refetch()
+          before.refetch()
+        }}
         contentContainerStyle={{ paddingBottom: spacing.xxl }}
         ListHeaderComponent={
           <View style={{ gap: spacing.xl, paddingBottom: spacing.lg }}>
@@ -317,7 +321,7 @@ export default function Lancamentos() {
                 <SkeletonRow key={i} delay={i * 100} />
               ))}
             </Gutter>
-          ) : (
+          ) : list.error ? null : (
             <Gutter>
               <EmptyState
                 title={`Nenhum lançamento em ${formatMonth(month)}.`}
@@ -378,9 +382,12 @@ export default function Lancamentos() {
 }
 
 function greeting(): string {
-  const hour = Number(
-    new Intl.DateTimeFormat('pt-BR', { hour: 'numeric', hour12: false, timeZone: 'America/Sao_Paulo' })
+  // A hora sai em en-US/h23 e passa por parseInt: o padrão pt-BR varia entre
+  // motores ICU (há os que devolvem "14 h"), e Number() disso é NaN.
+  const hour = parseInt(
+    new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Sao_Paulo' })
       .format(new Date()),
+    10,
   )
   if (hour < 12) return 'Bom dia'
   return hour < 18 ? 'Boa tarde' : 'Boa noite'
