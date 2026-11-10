@@ -32,15 +32,8 @@
     "BETTER_AUTH_URL": "https://nauri.app",
     "MAIL_FROM": "Nauri <nao-responda@nauri.app>",
     "SIGNUP_MODE": "invite"
-  },
-
-  "ratelimits": [
-    {
-      "name": "AUTH_RATE_LIMITER",
-      "namespace_id": "1001",
-      // 10 tentativas por minuto por IP: folgado para quem erra a senha,
-      // apertado para quem está testando lista de senhas.
-      "simple": { "limit": 10, "period": 60 }
-    }
-  ]
+  }
+  // O rate limit de login e cadastro é o do Better Auth, com a contagem no
+  // banco (lib/auth.ts). O binding da Cloudflare contava por data center, de
+  // forma aproximada, e deixava passar dezenas de tentativas.
 }

@@ -3,7 +3,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { expo } from '@better-auth/expo'
 import { bearer } from 'better-auth/plugins'
 import type { Db } from '../db/client.js'
-import { account, session, user, verification } from '../db/schema.js'
+import { account, rateLimit, session, user, verification } from '../db/schema.js'
 import type { Env } from '../env.js'
 import { button, layout, sendEmail } from './email.js'
 import { seedDefaultCategories } from './seed.js'
@@ -19,7 +19,7 @@ export function createAuth(db: Db, env: Env) {
     basePath: '/api/auth',
     database: drizzleAdapter(db, {
       provider: 'pg',
-      schema: { user, session, account, verification },
+      schema: { user, session, account, verification, rateLimit },
       // Sem isto, uma falha no meio do cadastro deixa usuário órfão.
       transaction: true,
     }),
@@ -90,6 +90,29 @@ export function createAuth(db: Db, env: Env) {
     // basta nos dois casos e o Safari não bloqueia o cookie.
     advanced: {
       defaultCookieAttributes: { sameSite: 'lax', secure: true, httpOnly: true },
+      // O IP do rate limit vem do header que a própria Cloudflare preenche. O
+      // padrão (x-forwarded-for) aceita um valor mandado pelo cliente, e
+      // trocar de "IP" a cada tentativa furaria o limite.
+      ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
+    },
+
+    // Contagem por IP e rota, guardada no banco. Fica ligado explicitamente:
+    // num Worker o NODE_ENV não diz "production" e o padrão o desligaria.
+    rateLimit: {
+      enabled: true,
+      storage: 'database',
+      window: 60,
+      max: 100,
+      customRules: {
+        // Chamado a cada tela e só lê a sessão: limitar só custaria uma
+        // escrita no banco por navegação.
+        '/get-session': false,
+        // 10 por minuto: folgado para quem erra a senha, apertado para quem
+        // testa lista de senhas. Redefinição e reenvio de e-mail ficam no
+        // padrão do Better Auth (3 por minuto).
+        '/sign-in/*': { window: 60, max: 10 },
+        '/sign-up/*': { window: 60, max: 10 },
+      },
     },
 
     // O app nativo não tem cookie jar: manda a sessão no header Authorization.

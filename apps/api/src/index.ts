@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import { createMiddleware } from 'hono/factory'
 import { logger } from 'hono/logger'
 import type { AppContext } from './env.js'
+import { translateRateLimit } from './lib/rate-limit.js'
 import { withServices } from './middleware.js'
 import { accountRoute } from './routes/account.js'
 import { budgetsRoute } from './routes/budgets.js'
@@ -33,26 +34,6 @@ const signupGate = createMiddleware<AppContext>(async (c, next) => {
   await next()
 })
 
-/**
- * Rate limit nas rotas de autenticação: são as únicas que respondem
- * diferente para senha certa e senha errada, ou seja, as únicas que valem a
- * pena martelar. Usa o binding nativo do Cloudflare; se ele não estiver
- * configurado (dev local), deixa passar em vez de quebrar.
- */
-const authRateLimit = createMiddleware<AppContext>(async (c, next) => {
-  const limiter = (c.env as Record<string, unknown>).AUTH_RATE_LIMITER as
-    | { limit(o: { key: string }): Promise<{ success: boolean }> }
-    | undefined
-  if (!limiter) return next()
-
-  const key = c.req.header('cf-connecting-ip') ?? 'desconhecido'
-  const { success } = await limiter.limit({ key })
-  if (!success) {
-    return c.json({ code: 'TOO_MANY_REQUESTS', message: 'Muitas tentativas. Tente de novo em um minuto.' }, 429)
-  }
-  await next()
-})
-
 const app = new Hono<AppContext>()
 
 app.use('*', logger())
@@ -72,11 +53,12 @@ app.use('/api/*', (c, next) =>
 )
 
 app.use('/api/auth/sign-up/*', signupGate)
-app.use('/api/auth/sign-in/*', authRateLimit)
-app.use('/api/auth/sign-up/*', authRateLimit)
-app.use('/api/auth/request-password-reset', authRateLimit)
 
-app.on(['GET', 'POST'], '/api/auth/*', (c) => c.get('auth').handler(c.req.raw))
+// O rate limit das rotas de autenticação é o do Better Auth, com a contagem no
+// banco (ver `rateLimit` em lib/auth.ts). Aqui só traduzimos a resposta 429.
+app.on(['GET', 'POST'], '/api/auth/*', async (c) =>
+  translateRateLimit(await c.get('auth').handler(c.req.raw)),
+)
 
 app.get('/health', (c) => c.json({ ok: true }))
 
