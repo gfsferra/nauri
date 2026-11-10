@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "orbital-api",
+  "name": "nauri-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",
   // better-auth usa APIs de Node (crypto, buffer) por baixo.

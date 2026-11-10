@@ -1,4 +1,4 @@
-// Metro precisa enxergar a raiz do monorepo para resolver @orbital/contracts,
+// Metro precisa enxergar a raiz do monorepo para resolver @nauri/contracts,
 // que é consumido direto do TypeScript-fonte, sem passo de build.
 const { getDefaultConfig } = require('expo/metro-config')
 const path = require('node:path')

@@ -3,12 +3,12 @@ import {
   byCategoryQuerySchema,
   monthlyQuerySchema,
   summaryQuerySchema,
-} from '@orbital/contracts'
+} from '@nauri/contracts'
 import { and, desc, eq, gte, lte, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { categories, transactions } from '../db/schema.js'
 import type { AppContext } from '../env.js'
-import { addMonthsToMonth, currentMonth, monthBounds } from '@orbital/contracts'
+import { addMonthsToMonth, currentMonth, monthBounds } from '@nauri/contracts'
 import { toCents } from '../lib/cents.js'
 import { materializeRecurrences } from '../lib/materialize.js'
 import { requireAuth } from '../middleware.js'

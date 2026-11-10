@@ -4,7 +4,7 @@ import {
   type ColumnMap,
   type SheetMapping,
   type SheetResult,
-} from '@orbital/contracts'
+} from '@nauri/contracts'
 import { useMutation } from '@tanstack/react-query'
 import * as DocumentPicker from 'expo-document-picker'
 import Papa from 'papaparse'

@@ -1,18 +1,18 @@
 {
   "expo": {
-    "name": "Orbital",
-    "slug": "orbital",
+    "name": "Nauri",
+    "slug": "nauri",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "orbital",
+    "scheme": "nauri",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gabrielsferra.orbital"
+      "bundleIdentifier": "com.gabrielsferra.nauri"
     },
     "android": {
-      "package": "com.gabrielsferra.orbital",
+      "package": "com.gabrielsferra.nauri",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

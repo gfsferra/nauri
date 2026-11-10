@@ -20,7 +20,7 @@ export default function ForgotPassword() {
     const { error: authError } = await requestPasswordReset({
       email: email.trim(),
       // O link do e-mail passa pela API (que valida o token) e termina na tela
-      // do app: na web, a origem atual; no nativo, o deep link orbital://.
+      // do app: na web, a origem atual; no nativo, o deep link nauri://.
       redirectTo: Linking.createURL('/reset-password'),
     })
     setLoading(false)

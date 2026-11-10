@@ -25,7 +25,7 @@ export function createAuth(db: Db, env: Env) {
     }),
     // O deep link do app nativo também é destino de redirect (redefinição de
     // senha), e o Better Auth recusa qualquer callback fora desta lista.
-    trustedOrigins: [env.APP_URL, 'orbital://'],
+    trustedOrigins: [env.APP_URL, 'nauri://'],
 
     emailAndPassword: {
       enabled: true,
@@ -95,7 +95,7 @@ export function createAuth(db: Db, env: Env) {
     // O app nativo não tem cookie jar: manda a sessão no header Authorization.
     plugins: [
       bearer(),
-      // Libera o deep link orbital:// como origem confiável do app nativo.
+      // Libera o deep link nauri:// como origem confiável do app nativo.
       expo(),
     ],
   })

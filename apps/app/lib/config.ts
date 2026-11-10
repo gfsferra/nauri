@@ -4,4 +4,4 @@
  */
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8787'
 
-export const APP_SCHEME = 'orbital'
+export const APP_SCHEME = 'nauri'
