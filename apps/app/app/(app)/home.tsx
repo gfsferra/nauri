@@ -43,7 +43,7 @@ type Row = {
   recurrenceId: string | null
 }
 
-export default function Lancamentos() {
+export default function Home() {
   const theme = useTheme()
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -108,10 +108,10 @@ export default function Lancamentos() {
       : null
 
   const quickActions = [
-    { key: 'novo', label: 'Novo', icon: 'add-outline', go: () => router.push('/novo') },
-    { key: 'relatorios', label: 'Relatórios', icon: 'pie-chart-outline', go: () => router.push('/relatorios') },
-    { key: 'importar', label: 'Importar', icon: 'cloud-upload-outline', go: () => router.push('/importar') },
-    { key: 'ajustes', label: 'Perfil', icon: 'person-outline', go: () => router.push('/ajustes') },
+    { key: 'new', label: 'Novo', icon: 'add-outline', go: () => router.push('/new') },
+    { key: 'reports', label: 'Relatórios', icon: 'pie-chart-outline', go: () => router.push('/reports') },
+    { key: 'import', label: 'Importar', icon: 'cloud-upload-outline', go: () => router.push('/import') },
+    { key: 'settings', label: 'Perfil', icon: 'person-outline', go: () => router.push('/settings') },
   ] as const
 
   return (
@@ -300,7 +300,7 @@ export default function Lancamentos() {
               <ErrorBanner message={list.error?.message ?? summary.error?.message} />
               <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
                 <Text style={{ ...type.section, color: theme.text }}>Lançamentos</Text>
-                <Pressable onPress={() => router.push('/relatorios')} hitSlop={8}>
+                <Pressable onPress={() => router.push('/reports')} hitSlop={8}>
                   <Text style={{ ...type.body, fontWeight: '600', color: theme.accentText }}>
                     Ver relatórios
                   </Text>

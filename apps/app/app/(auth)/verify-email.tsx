@@ -5,7 +5,7 @@ import { BrandMark, Gutter, Muted, Screen, Title, TrustNote } from '@/components
 import { spacing, type, useTheme } from '@/lib/theme'
 
 /** Tela de espera entre o cadastro e a confirmação do e-mail. */
-export default function Verificar() {
+export default function VerifyEmail() {
   const theme = useTheme()
   return (
     <Screen>
@@ -25,7 +25,7 @@ export default function Verificar() {
             </View>
           </View>
 
-          <Link href="/entrar">
+          <Link href="/sign-in">
             <Text style={{ ...type.row, fontWeight: '600', color: theme.accentText }}>
               Já confirmei, quero entrar
             </Text>

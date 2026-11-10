@@ -12,5 +12,5 @@ export default function Index() {
   // spinner em lugar nenhum, e aqui a espera é de milissegundos.
   if (isPending) return <View style={{ flex: 1, backgroundColor: theme.bg }} />
 
-  return <Redirect href={data?.user ? '/lancamentos' : '/entrar'} />
+  return <Redirect href={data?.user ? '/home' : '/sign-in'} />
 }

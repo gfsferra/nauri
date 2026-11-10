@@ -34,7 +34,7 @@ const BATCH = 500
 
 type Sheet = { headers: string[]; records: Array<Record<string, string>> }
 
-export default function Importar() {
+export default function Import() {
   const theme = useTheme()
   const [sheet, setSheet] = useState<Sheet | null>(null)
   const [expense, setExpense] = useState<ColumnMap | null>(null)

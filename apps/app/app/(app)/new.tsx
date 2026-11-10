@@ -17,7 +17,7 @@ function shiftDate(iso: string, days: number): string {
   return next.toISOString().slice(0, 10)
 }
 
-export default function Novo() {
+export default function NewTransaction() {
   const theme = useTheme()
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -60,7 +60,7 @@ export default function Novo() {
       // feira e depois o estacionamento não deveria custar dois formulários.
       setCents(0)
       setDescription('')
-      router.push('/lancamentos')
+      router.push('/home')
     },
     onError: (e: Error) => setError(e.message),
   })

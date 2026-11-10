@@ -33,7 +33,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 /** O respiro de 2px entre fatias que o DS desenha. */
 const GAP = 2
 
-export default function Relatorios() {
+export default function Reports() {
   const theme = useTheme()
   const [month, setMonth] = useState(currentMonth())
   const { from, to } = monthBounds(month)

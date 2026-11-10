@@ -17,7 +17,7 @@ import { spacing, type, useTheme } from '@/lib/theme'
 
 const MIN_PASSWORD = 10
 
-export default function Cadastrar() {
+export default function SignUp() {
   const theme = useTheme()
   const router = useRouter()
   const [name, setName] = useState('')
@@ -44,7 +44,7 @@ export default function Cadastrar() {
       setError(authError.message ?? 'Não foi possível criar a conta.')
       return
     }
-    router.replace('/verificar')
+    router.replace('/verify-email')
   }
 
   return (
@@ -120,7 +120,7 @@ export default function Cadastrar() {
           />
         </View>
 
-        <Link href="/entrar">
+        <Link href="/sign-in">
           <Text style={{ ...type.body, fontWeight: '600', color: theme.accentText }}>
             Já tenho conta
           </Text>

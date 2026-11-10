@@ -16,7 +16,7 @@ import {
 import { signIn } from '@/lib/auth-client'
 import { spacing, type, useTheme } from '@/lib/theme'
 
-export default function Entrar() {
+export default function SignIn() {
   const theme = useTheme()
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -40,7 +40,7 @@ export default function Entrar() {
       )
       return
     }
-    router.replace('/lancamentos')
+    router.replace('/home')
   }
 
   return (
@@ -89,12 +89,12 @@ export default function Entrar() {
           </View>
 
           <View style={{ gap: spacing.md }}>
-            <Link href="/esqueci-senha">
+            <Link href="/forgot-password">
               <Text style={{ ...type.body, fontWeight: '600', color: theme.text2 }}>
                 Esqueci minha senha
               </Text>
             </Link>
-            <Link href="/cadastrar">
+            <Link href="/sign-up">
               <Text style={{ ...type.body, fontWeight: '600', color: theme.accentText }}>
                 Criar uma conta
               </Text>

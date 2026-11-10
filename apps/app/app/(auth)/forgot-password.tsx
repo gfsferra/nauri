@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons'
+import * as Linking from 'expo-linking'
 import { Link } from 'expo-router'
 import { useState } from 'react'
 import { Text, View } from 'react-native'
 import { BrandMark, Button, ErrorBanner, Field, Gutter, Muted, Screen, Title } from '@/components/ui'
 import { requestPasswordReset } from '@/lib/auth-client'
-import { API_URL } from '@/lib/config'
 import { spacing, type, useTheme } from '@/lib/theme'
 
-export default function EsqueciSenha() {
+export default function ForgotPassword() {
   const theme = useTheme()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
@@ -19,7 +19,9 @@ export default function EsqueciSenha() {
     setLoading(true)
     const { error: authError } = await requestPasswordReset({
       email: email.trim(),
-      redirectTo: `${API_URL}/redefinir-senha`,
+      // O link do e-mail passa pela API (que valida o token) e termina na tela
+      // do app: na web, a origem atual; no nativo, o deep link orbital://.
+      redirectTo: Linking.createURL('/reset-password'),
     })
     setLoading(false)
     // Sucesso mesmo quando o e-mail não existe: responder diferente revelaria
@@ -66,7 +68,7 @@ export default function EsqueciSenha() {
             </View>
           )}
 
-          <Link href="/entrar">
+          <Link href="/sign-in">
             <Text style={{ ...type.body, fontWeight: '600', color: theme.accentText }}>
               Voltar para entrar
             </Text>

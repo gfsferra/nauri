@@ -12,7 +12,7 @@ export default function AppLayout() {
   // Guarda de rota: sem isso, uma URL colada direto no navegador entraria numa
   // tela que chamaria a API sem sessão e só mostraria erro.
   if (isPending) return null
-  if (!data?.user) return <Redirect href="/entrar" />
+  if (!data?.user) return <Redirect href="/sign-in" />
 
   return (
     <Tabs
@@ -38,21 +38,21 @@ export default function AppLayout() {
       }}
     >
       <Tabs.Screen
-        name="lancamentos"
+        name="home"
         options={{
           title: 'Início',
           tabBarIcon: ({ color }) => <Ionicons name="home-outline" color={color} size={21} />,
         }}
       />
       <Tabs.Screen
-        name="novo"
+        name="new"
         options={{
           title: 'Novo',
           tabBarIcon: ({ color }) => <Ionicons name="add-circle-outline" color={color} size={22} />,
         }}
       />
       <Tabs.Screen
-        name="relatorios"
+        name="reports"
         options={{
           title: 'Relatórios',
           tabBarIcon: ({ color }) => <Ionicons name="pie-chart-outline" color={color} size={20} />,
@@ -60,9 +60,9 @@ export default function AppLayout() {
       />
       {/* Importar é operação pontual, não merece uma aba fixa: `href: null`
           mantém a rota navegável sem ocupar espaço na barra. */}
-      <Tabs.Screen name="importar" options={{ href: null }} />
+      <Tabs.Screen name="import" options={{ href: null }} />
       <Tabs.Screen
-        name="ajustes"
+        name="settings"
         options={{
           title: 'Perfil',
           tabBarIcon: ({ color }) => <Ionicons name="person-outline" color={color} size={21} />,

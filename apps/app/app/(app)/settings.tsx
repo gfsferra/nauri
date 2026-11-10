@@ -15,14 +15,14 @@ import { API_URL } from '@/lib/config'
 import { toneOf } from '@/lib/format'
 import { spacing, type, useTheme } from '@/lib/theme'
 
-export default function Ajustes() {
+export default function Settings() {
   const theme = useTheme()
   const router = useRouter()
   const { data } = useSession()
 
   async function handleSignOut() {
     await signOut()
-    router.replace('/entrar')
+    router.replace('/sign-in')
   }
 
   function handleExport() {
@@ -80,7 +80,7 @@ export default function Ajustes() {
             <ListRow
               icon={tile('cloud-upload-outline')}
               label="Importar planilha (CSV)"
-              onPress={() => router.push('/importar')}
+              onPress={() => router.push('/import')}
             />
             <ListRow
               icon={tile('download-outline')}
