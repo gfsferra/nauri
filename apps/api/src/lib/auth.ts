@@ -85,11 +85,11 @@ export function createAuth(db: Db, env: Env) {
       updateAge: 60 * 60 * 24,
     },
 
-    // O app web e a API ficam em domínios diferentes (Pages e Workers), então
-    // o cookie precisa ser cross-site — e por isso mesmo, obrigatoriamente
-    // Secure e HttpOnly.
+    // App web e API estão na mesma origem em produção, e no local
+    // localhost:8081 e localhost:8787 contam como o mesmo site, então `lax`
+    // basta nos dois casos e o Safari não bloqueia o cookie.
     advanced: {
-      defaultCookieAttributes: { sameSite: 'none', secure: true, httpOnly: true },
+      defaultCookieAttributes: { sameSite: 'lax', secure: true, httpOnly: true },
     },
 
     // O app nativo não tem cookie jar: manda a sessão no header Authorization.
