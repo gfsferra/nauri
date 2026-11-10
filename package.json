@@ -14,6 +14,8 @@
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "dev:api": "npm run dev --workspace @nauri/api",
-    "dev:app": "npm run start --workspace @nauri/app"
+    "dev:app": "npm run start --workspace @nauri/app",
+    "build:web": "EXPO_PUBLIC_API_URL=https://nauri.app npm run build:web --workspace @nauri/app && rm -f apps/app/dist/_sitemap.html && ! grep -rq localhost:8787 apps/app/dist/_expo",
+    "deploy": "npm run build:web && npm run deploy --workspace @nauri/api"
   }
 }

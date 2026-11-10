@@ -6,16 +6,41 @@
   // better-auth usa APIs de Node (crypto, buffer) por baixo.
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
-  "unsafe": {
-    "bindings": [
-      {
-        "name": "AUTH_RATE_LIMITER",
-        "type": "ratelimit",
-        "namespace_id": "1001",
-        // 10 tentativas por minuto por IP: folgado para quem erra a senha,
-        // apertado para quem está testando lista de senhas.
-        "simple": { "limit": 10, "period": 60 }
-      }
-    ]
-  }
+
+  // App web e API no mesmo Worker e na mesma origem: sem cookie entre sites
+  // (que o Safari bloqueia) e sem CORS em produção. O build do app
+  // (`npm run build:web` na raiz) precisa rodar antes do deploy.
+  "assets": {
+    "directory": "../app/dist",
+    "binding": "ASSETS",
+    // Rota sem arquivo cai no app, que decide o que mostrar.
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/health"]
+  },
+  // Cria sozinho o registro de DNS e o certificado de nauri.app.
+  "routes": [{ "pattern": "nauri.app", "custom_domain": true }],
+  // Sem isto o `wrangler dev` usa o host da rota acima e reescreve o Origin
+  // de localhost:8787 para http://nauri.app, e o Better Auth recusa o login
+  // feito na mesma origem com INVALID_ORIGIN.
+  "dev": { "host": "localhost:8787" },
+
+  // Valores de produção. No `wrangler dev`, os de `.dev.vars` têm prioridade.
+  // Os segredos (DATABASE_URL, BETTER_AUTH_SECRET, RESEND_API_KEY,
+  // INVITE_CODE) vão por `wrangler secret put`.
+  "vars": {
+    "APP_URL": "https://nauri.app",
+    "BETTER_AUTH_URL": "https://nauri.app",
+    "MAIL_FROM": "Nauri <nao-responda@nauri.app>",
+    "SIGNUP_MODE": "invite"
+  },
+
+  "ratelimits": [
+    {
+      "name": "AUTH_RATE_LIMITER",
+      "namespace_id": "1001",
+      // 10 tentativas por minuto por IP: folgado para quem erra a senha,
+      // apertado para quem está testando lista de senhas.
+      "simple": { "limit": 10, "period": 60 }
+    }
+  ]
 }

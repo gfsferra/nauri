@@ -58,9 +58,10 @@ const app = new Hono<AppContext>()
 app.use('*', logger())
 app.use('*', withServices)
 
-// Credenciais atravessam origens diferentes (app no Pages, API no Workers),
-// então a origem precisa ser explícita — `*` é recusado pelo navegador junto
-// com `credentials: true`.
+// Em produção app e API estão na mesma origem e o CORS não entra em jogo. Ele
+// fica para o desenvolvimento local, onde o Expo (8081) chama a API (8787). A
+// origem precisa ser explícita: `*` é recusado pelo navegador junto com
+// `credentials: true`.
 app.use('/api/*', (c, next) =>
   cors({
     origin: [c.env.APP_URL],
@@ -78,9 +79,6 @@ app.use('/api/auth/request-password-reset', authRateLimit)
 app.on(['GET', 'POST'], '/api/auth/*', (c) => c.get('auth').handler(c.req.raw))
 
 app.get('/health', (c) => c.json({ ok: true }))
-
-// A API é headless: quem chega na raiz veio de um link e quer o app, não JSON.
-app.get('/', (c) => c.redirect(c.env.APP_URL))
 
 const routes = app
   .route('/api/categories', categoriesRoute)
