@@ -6,6 +6,7 @@ import {
   date,
   foreignKey,
   index,
+  integer,
   pgEnum,
   pgTable,
   smallint,
@@ -80,6 +81,26 @@ export const verification = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('verification_identifier_idx').on(t.identifier)],
+)
+
+/**
+ * Contadores do rate limit do Better Auth (`rateLimit.storage: 'database'`).
+ * No banco a checagem e o incremento são atômicos, então o limite é exato. O
+ * binding de rate limit da Cloudflare conta por data center e de forma
+ * aproximada, e deixava passar dezenas de tentativas.
+ */
+export const rateLimit = pgTable(
+  'rate_limit',
+  {
+    id: text('id').primaryKey(),
+    /** IP + rota, montado pelo Better Auth. */
+    key: text('key').notNull().unique(),
+    count: integer('count').notNull(),
+    /** Epoch em ms. */
+    lastRequest: bigint('last_request', { mode: 'number' }).notNull(),
+  },
+  // A limpeza periódica apaga por `last_request`.
+  (t) => [index('rate_limit_last_request_idx').on(t.lastRequest)],
 )
 
 /* ──────────────────────────── Domínio ───────────────────────────── */

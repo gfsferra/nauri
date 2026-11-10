@@ -28,6 +28,10 @@ Mudar o formato de uma resposta na API quebra o `tsc` do app na hora.
 - **Recorrentes são gerados na leitura, sem cron.** O índice único
   `(recurrence_id, occurred_on)` garante que abrir o mesmo mês duas vezes não
   lança o salário duas vezes.
+- **Rate limit de autenticação no banco.** Login e cadastro aceitam 10
+  tentativas por minuto por IP; redefinição de senha, 3. A contagem fica na
+  tabela `rate_limit` (Better Auth com `storage: 'database'`), então o limite é
+  exato. O IP vem do `cf-connecting-ip`, que o cliente não consegue forjar.
 - **Toda query filtra por `user_id`.** Num app multiusuário, um `WHERE` esquecido
   serve o extrato de uma pessoa para outra.
 
@@ -132,6 +136,12 @@ prioridade. Os segredos vão por `wrangler secret put`, a partir de `apps/api`:
 No Neon, a branch `production` é a de produção e a `dev` é a do `.dev.vars`
 local. Migrations em produção:
 `DATABASE_URL=<production> npm run db:migrate --workspace @nauri/api`.
+
+**O CI não roda migrations.** Num PR que traz migration nova, aplique-a na
+branch `production` *antes* do merge: o deploy sai sozinho logo depois, e o
+código novo já espera o schema novo. Por isso as migrations devem ser
+aditivas (tabela ou coluna nova), de modo que a versão que está no ar continue
+funcionando com o schema à frente.
 
 ### Testar a mesma origem localmente
 
