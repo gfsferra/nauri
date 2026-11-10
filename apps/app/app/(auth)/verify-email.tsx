@@ -25,7 +25,7 @@ export default function VerifyEmail() {
             </View>
           </View>
 
-          <Link href="/sign-in">
+          <Link href="/login">
             <Text style={{ ...type.row, fontWeight: '600', color: theme.accentText }}>
               Já confirmei, quero entrar
             </Text>

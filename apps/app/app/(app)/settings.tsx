@@ -22,7 +22,7 @@ export default function Settings() {
 
   async function handleSignOut() {
     await signOut()
-    router.replace('/sign-in')
+    router.replace('/login')
   }
 
   function handleExport() {

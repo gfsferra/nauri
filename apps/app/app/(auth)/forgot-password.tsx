@@ -68,7 +68,7 @@ export default function ForgotPassword() {
             </View>
           )}
 
-          <Link href="/sign-in">
+          <Link href="/login">
             <Text style={{ ...type.body, fontWeight: '600', color: theme.accentText }}>
               Voltar para entrar
             </Text>

@@ -17,7 +17,7 @@ import { spacing, type, useTheme } from '@/lib/theme'
 
 const MIN_PASSWORD = 10
 
-export default function SignUp() {
+export default function Register() {
   const theme = useTheme()
   const router = useRouter()
   const [name, setName] = useState('')
@@ -120,7 +120,7 @@ export default function SignUp() {
           />
         </View>
 
-        <Link href="/sign-in">
+        <Link href="/login">
           <Text style={{ ...type.body, fontWeight: '600', color: theme.accentText }}>
             Já tenho conta
           </Text>

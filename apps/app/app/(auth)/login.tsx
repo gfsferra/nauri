@@ -16,7 +16,7 @@ import {
 import { signIn } from '@/lib/auth-client'
 import { spacing, type, useTheme } from '@/lib/theme'
 
-export default function SignIn() {
+export default function Login() {
   const theme = useTheme()
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -94,7 +94,7 @@ export default function SignIn() {
                 Esqueci minha senha
               </Text>
             </Link>
-            <Link href="/sign-up">
+            <Link href="/register">
               <Text style={{ ...type.body, fontWeight: '600', color: theme.accentText }}>
                 Criar uma conta
               </Text>

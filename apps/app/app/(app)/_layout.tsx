@@ -12,7 +12,7 @@ export default function AppLayout() {
   // Guarda de rota: sem isso, uma URL colada direto no navegador entraria numa
   // tela que chamaria a API sem sessão e só mostraria erro.
   if (isPending) return null
-  if (!data?.user) return <Redirect href="/sign-in" />
+  if (!data?.user) return <Redirect href="/login" />
 
   return (
     <Tabs

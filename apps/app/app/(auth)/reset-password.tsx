@@ -102,7 +102,7 @@ export default function ResetPassword() {
             </View>
           )}
 
-          <Link href={invalidLink && !done ? '/forgot-password' : '/sign-in'}>
+          <Link href={invalidLink && !done ? '/forgot-password' : '/login'}>
             <Text style={{ ...type.body, fontWeight: '600', color: theme.accentText }}>
               {invalidLink && !done ? 'Pedir um novo link' : 'Ir para entrar'}
             </Text>
