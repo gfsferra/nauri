@@ -97,6 +97,14 @@ código da API. Mesma origem significa cookie `SameSite=Lax` (o Safari não
 bloqueia) e nenhum CORS em produção. A configuração está em
 `apps/api/wrangler.jsonc`.
 
+O deploy é automático: todo push na `master` passa por typecheck e testes e,
+se tudo passar, vai para produção (`.github/workflows/ci.yml`). Os PRs rodam
+só as checagens. O job de deploy usa o environment `production` do GitHub,
+com o segredo `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers") e a
+variável `CLOUDFLARE_ACCOUNT_ID`.
+
+Para publicar à mão, sem passar pelo CI:
+
 ```bash
 npx wrangler login   # uma vez por máquina
 npm run deploy       # build:web + wrangler deploy
