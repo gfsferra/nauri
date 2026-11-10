@@ -1,13 +1,23 @@
+import { Ionicons } from '@expo/vector-icons'
 import { Link, useRouter } from 'expo-router'
 import { useState } from 'react'
-import { KeyboardAvoidingView, Platform, Text, View } from 'react-native'
-import { Button, ErrorBanner, Field, Muted, Screen, Title } from '@/components/ui'
+import { KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native'
+import {
+  BrandMark,
+  Button,
+  ErrorBanner,
+  Field,
+  Gutter,
+  Muted,
+  Screen,
+  Title,
+} from '@/components/ui'
 import { signUp } from '@/lib/auth-client'
-import { spacing, useTheme } from '@/lib/theme'
+import { spacing, type, useTheme } from '@/lib/theme'
 
 const MIN_PASSWORD = 10
 
-export default function Cadastrar() {
+export default function Register() {
   const theme = useTheme()
   const router = useRouter()
   const [name, setName] = useState('')
@@ -34,21 +44,27 @@ export default function Cadastrar() {
       setError(authError.message ?? 'Não foi possível criar a conta.')
       return
     }
-    router.replace('/verificar')
+    router.replace('/verify-email')
   }
 
   return (
     <Screen scroll>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1, justifyContent: 'center', padding: spacing.md, gap: spacing.lg }}
+        style={{ flex: 1, justifyContent: 'center' }}
       >
-        <View style={{ gap: spacing.xs }}>
-          <Title>Criar conta</Title>
-          <Muted>Leva um minuto. Depois dá para importar sua planilha inteira.</Muted>
+        <Gutter style={{ gap: spacing.xxl }}>
+        <View style={{ gap: spacing.lg }}>
+          <BrandMark>
+            <Ionicons name="wallet-outline" size={22} color="#F8FAFC" />
+          </BrandMark>
+          <View style={{ gap: 6 }}>
+            <Title>Criar conta</Title>
+            <Muted>Leva um minuto. Depois dá para importar sua planilha inteira.</Muted>
+          </View>
         </View>
 
-        <View style={{ gap: spacing.md }}>
+        <View style={{ gap: spacing.lg }}>
           <ErrorBanner message={error} />
 
           <Field label="Nome" value={name} onChangeText={setName} autoComplete="name" placeholder="Como quer ser chamado" />
@@ -79,16 +95,22 @@ export default function Cadastrar() {
             placeholder="Opcional"
           />
 
-          <Text
+          <Pressable
             onPress={() => setAccepted((v) => !v)}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: accepted }}
-            style={{ color: theme.text, fontSize: 14, lineHeight: 20 }}
+            style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, minHeight: 48, paddingTop: 2 }}
           >
-            {accepted ? '☑' : '☐'}  Li e aceito os{' '}
-            <Text style={{ fontWeight: '600' }}>Termos de Uso</Text> e a{' '}
-            <Text style={{ fontWeight: '600' }}>Política de Privacidade</Text>.
-          </Text>
+            <Ionicons
+              name={accepted ? 'checkbox' : 'square-outline'}
+              size={20}
+              color={accepted ? theme.accent : theme.text3}
+            />
+            <Text style={{ ...type.row, fontWeight: '400', color: theme.text, flex: 1, lineHeight: 20 }}>
+              Li e aceito os <Text style={{ fontWeight: '600' }}>Termos de Uso</Text> e a{' '}
+              <Text style={{ fontWeight: '600' }}>Política de Privacidade</Text>.
+            </Text>
+          </Pressable>
 
           <Button
             label="Criar conta"
@@ -98,11 +120,12 @@ export default function Cadastrar() {
           />
         </View>
 
-        <Link href="/entrar" style={{ alignSelf: 'center' }}>
-          <Text style={{ color: theme.text, fontSize: 14, fontWeight: '600' }}>
+        <Link href="/login">
+          <Text style={{ ...type.body, fontWeight: '600', color: theme.accentText }}>
             Já tenho conta
           </Text>
         </Link>
+        </Gutter>
       </KeyboardAvoidingView>
     </Screen>
   )

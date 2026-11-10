@@ -2,7 +2,7 @@ import { hc } from 'hono/client'
 import { Platform } from 'react-native'
 // Só o TIPO cruza a fronteira: o TypeScript enxerga cada rota e cada resposta,
 // mas o Metro não empacota uma linha do servidor dentro do app.
-import type { AppType } from '@financas/api'
+import type { AppType } from '@orbital/api'
 import { authClient } from './auth-client'
 import { API_URL } from './config'
 

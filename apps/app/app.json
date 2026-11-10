@@ -1,18 +1,18 @@
 {
   "expo": {
-    "name": "Finanças",
-    "slug": "financas",
+    "name": "Orbital",
+    "slug": "orbital",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "financas",
+    "scheme": "orbital",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gabrielsferra.financas"
+      "bundleIdentifier": "com.gabrielsferra.orbital"
     },
     "android": {
-      "package": "com.gabrielsferra.financas",
+      "package": "com.gabrielsferra.orbital",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

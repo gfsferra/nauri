@@ -1,5 +1,5 @@
 import { zValidator } from '@hono/zod-validator'
-import { recurrenceCreateSchema, recurrenceUpdateSchema } from '@financas/contracts'
+import { recurrenceCreateSchema, recurrenceUpdateSchema } from '@orbital/contracts'
 import { and, asc, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { z } from 'zod'

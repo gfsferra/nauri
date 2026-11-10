@@ -23,7 +23,12 @@ const signupGate = createMiddleware<AppContext>(async (c, next) => {
   if (c.env.SIGNUP_MODE !== 'invite') return next()
   const code = c.req.header('x-invite-code')
   if (!code || !c.env.INVITE_CODE || code !== c.env.INVITE_CODE) {
-    return c.json({ error: 'O cadastro está aberto apenas por convite.' }, 403)
+    // Mesmo formato de erro do Better Auth ({ code, message }): o cliente dele
+    // só repassa `message`, e com outro formato o app mostraria um erro genérico.
+    return c.json(
+      { code: 'INVITE_REQUIRED', message: 'O cadastro está aberto apenas por convite. Confira o código.' },
+      403,
+    )
   }
   await next()
 })
@@ -43,7 +48,7 @@ const authRateLimit = createMiddleware<AppContext>(async (c, next) => {
   const key = c.req.header('cf-connecting-ip') ?? 'desconhecido'
   const { success } = await limiter.limit({ key })
   if (!success) {
-    return c.json({ error: 'Muitas tentativas. Tente de novo em um minuto.' }, 429)
+    return c.json({ code: 'TOO_MANY_REQUESTS', message: 'Muitas tentativas. Tente de novo em um minuto.' }, 429)
   }
   await next()
 })

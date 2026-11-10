@@ -1,7 +1,7 @@
 import { and, eq, lte, or, isNull, gte } from 'drizzle-orm'
 import type { Db } from '../db/client.js'
 import { recurrences, transactions } from '../db/schema.js'
-import type { IsoDate } from '@financas/contracts'
+import type { IsoDate } from '@orbital/contracts'
 import { occurrencesBetween } from './recurrence.js'
 
 /**

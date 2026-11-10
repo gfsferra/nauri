@@ -1,5 +1,5 @@
 import { Redirect } from 'expo-router'
-import { ActivityIndicator, View } from 'react-native'
+import { View } from 'react-native'
 import { useSession } from '@/lib/auth-client'
 import { useTheme } from '@/lib/theme'
 
@@ -8,13 +8,9 @@ export default function Index() {
   const { data, isPending } = useSession()
   const theme = useTheme()
 
-  if (isPending) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg }}>
-        <ActivityIndicator color={theme.muted} />
-      </View>
-    )
-  }
+  // Enquanto a sessão não é conhecida, só o fundo do tema: o DS não usa
+  // spinner em lugar nenhum, e aqui a espera é de milissegundos.
+  if (isPending) return <View style={{ flex: 1, backgroundColor: theme.bg }} />
 
-  return <Redirect href={data?.user ? '/lancamentos' : '/entrar'} />
+  return <Redirect href={data?.user ? '/home' : '/login'} />
 }

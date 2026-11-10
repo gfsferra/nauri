@@ -23,7 +23,9 @@ export function createAuth(db: Db, env: Env) {
       // Sem isto, uma falha no meio do cadastro deixa usuário órfão.
       transaction: true,
     }),
-    trustedOrigins: [env.APP_URL],
+    // O deep link do app nativo também é destino de redirect (redefinição de
+    // senha), e o Better Auth recusa qualquer callback fora desta lista.
+    trustedOrigins: [env.APP_URL, 'orbital://'],
 
     emailAndPassword: {
       enabled: true,
@@ -52,7 +54,7 @@ export function createAuth(db: Db, env: Env) {
         // API — onde não há rota, e o usuário recém-verificado vê um 404 como
         // primeira tela. Reaproveitamos o token dele e só trocamos o destino.
         const link = new URL(url)
-        link.searchParams.set('callbackURL', `${env.APP_URL}/lancamentos`)
+        link.searchParams.set('callbackURL', `${env.APP_URL}/home`)
 
         await sendEmail(env, {
           to: u.email,
@@ -93,7 +95,7 @@ export function createAuth(db: Db, env: Env) {
     // O app nativo não tem cookie jar: manda a sessão no header Authorization.
     plugins: [
       bearer(),
-      // Libera o deep link financas:// como origem confiável do app nativo.
+      // Libera o deep link orbital:// como origem confiável do app nativo.
       expo(),
     ],
   })
