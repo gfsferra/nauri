@@ -99,6 +99,9 @@ export default function Register() {
             onPress={() => setAccepted((v) => !v)}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: accepted }}
+            // O react-native-web 0.21 não leva o accessibilityState ao HTML;
+            // sem isto o leitor de tela não sabe se a caixa está marcada.
+            aria-checked={accepted}
             style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, minHeight: 48, paddingTop: 2 }}
           >
             <Ionicons
@@ -107,8 +110,26 @@ export default function Register() {
               color={accepted ? theme.accent : theme.text3}
             />
             <Text style={{ ...type.row, fontWeight: '400', color: theme.text, flex: 1, lineHeight: 20 }}>
-              Li e aceito os <Text style={{ fontWeight: '600' }}>Termos de Uso</Text> e a{' '}
-              <Text style={{ fontWeight: '600' }}>Política de Privacidade</Text>.
+              Li e aceito os{' '}
+              {/* O clique no link não pode marcar a caixa junto. A tela de
+                  cadastro fica embaixo na pilha, então voltar mantém o que já
+                  foi digitado. */}
+              <Link
+                href="/terms"
+                onPress={(e) => e.stopPropagation()}
+                style={{ fontWeight: '600', color: theme.accentText }}
+              >
+                Termos de Uso
+              </Link>{' '}
+              e a{' '}
+              <Link
+                href="/privacy"
+                onPress={(e) => e.stopPropagation()}
+                style={{ fontWeight: '600', color: theme.accentText }}
+              >
+                Política de Privacidade
+              </Link>
+              .
             </Text>
           </Pressable>
 
