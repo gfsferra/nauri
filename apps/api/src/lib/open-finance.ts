@@ -267,6 +267,16 @@ export function planSync(
   return { kind: 'idle' }
 }
 
+/**
+ * "Sincronizar agora": faz o trabalho que estiver pendente (dado novo ou
+ * próxima fatia do histórico) e, se não houver nenhum, relê os últimos dias.
+ * Assim o botão também avança o histórico, se o agendamento falhar.
+ */
+export function planManualSync(state: SyncState, providerUpdatedAt: string | null, today: string): SyncPlan {
+  const plan = planSync(state, providerUpdatedAt, today)
+  return plan.kind === 'idle' ? planSync(state, providerUpdatedAt, today, true) : plan
+}
+
 function maxDate(a: string, b: string): string {
   return a > b ? a : b
 }

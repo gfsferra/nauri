@@ -3,6 +3,7 @@ import {
   categoryFor,
   mapPluggyTransaction,
   occurredOnOf,
+  planManualSync,
   planSync,
   type PluggyTransaction,
 } from './open-finance.js'
@@ -253,6 +254,18 @@ describe('planSync', () => {
 
   it('pedido manual força a leitura recente', () => {
     expect(planSync({ ...base, backfillCursor: base.syncFrom }, base.providerUpdatedAt, TODAY, true).kind).toBe('recent')
+  })
+
+  it('botão manual avança o histórico quando não há dado novo', () => {
+    expect(planManualSync(base, base.providerUpdatedAt, TODAY).kind).toBe('backfill')
+  })
+
+  it('botão manual relê os últimos dias quando não há nada pendente', () => {
+    expect(planManualSync({ ...base, backfillCursor: base.syncFrom }, base.providerUpdatedAt, TODAY).kind).toBe('recent')
+  })
+
+  it('botão manual prioriza dado novo da Pluggy', () => {
+    expect(planManualSync(base, '2026-11-11T00:55:00.000Z', TODAY).kind).toBe('recent')
   })
 
   it('a janela recente não começa antes da data de corte', () => {

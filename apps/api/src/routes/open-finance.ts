@@ -19,13 +19,14 @@ export const openFinanceRoute = new Hono<AppContext>()
 
   /**
    * "Sincronizar agora". A conexão do Meu Pluggy se atualiza sozinha a cada
-   * 24 h e não aceita atualização manual: isto relê o que a Pluggy já tem.
+   * 24 h e não aceita atualização manual: isto lê o que a Pluggy já tem, e
+   * também avança o histórico (ver `planManualSync`).
    */
   .post('/sync', async (c) => {
     const config = openFinanceConfig(c.env)
     if (!config || config.userId !== c.get('userId')) return c.json({ error: 'Não disponível' }, 404)
     try {
-      const result = await syncOpenFinance(c.get('db'), config, { force: true })
+      const result = await syncOpenFinance(c.get('db'), config, { manual: true })
       return c.json(result)
     } catch (error) {
       console.error('Falha na sincronização do Open Finance:', error)

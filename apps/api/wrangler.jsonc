@@ -21,6 +21,11 @@
   },
   // Cria sozinho o registro de DNS e o certificado de nauri.app.
   "routes": [{ "pattern": "nauri.app", "custom_domain": true }],
+  // Só nauri.app. Um segundo endereço *.workers.dev seria outra origem: o
+  // cookie de sessão e o APP_URL não valeriam lá. (A conta precisa ter um
+  // subdomínio workers.dev mesmo assim: a Cloudflare o exige para aceitar
+  // Cron Triggers.)
+  "workers_dev": false,
   // Sem isto o `wrangler dev` usa o host da rota acima e reescreve o Origin
   // de localhost:8787 para http://nauri.app, e o Better Auth recusa o login
   // feito na mesma origem com INVALID_ORIGIN.
