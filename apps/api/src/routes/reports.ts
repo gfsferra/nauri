@@ -6,7 +6,7 @@ import {
 } from '@nauri/contracts'
 import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
-import { bankAccounts, categories, transactions } from '../db/schema.js'
+import { bankAccounts, budgetDate, categories, transactions } from '../db/schema.js'
 import type { AppContext } from '../env.js'
 import { addDays, addMonthsToMonth, currentMonth, monthBounds, todayInTimezone } from '@nauri/contracts'
 import { toCents } from '../lib/cents.js'
@@ -44,8 +44,8 @@ export const reportsRoute = new Hono<AppContext>()
       .where(
         and(
           eq(transactions.userId, c.get('userId')),
-          gte(transactions.occurredOn, from),
-          lte(transactions.occurredOn, to),
+          gte(budgetDate, from),
+          lte(budgetDate, to),
         ),
       )
 
@@ -77,8 +77,8 @@ export const reportsRoute = new Hono<AppContext>()
 
     const filters = [
       eq(transactions.userId, c.get('userId')),
-      gte(transactions.occurredOn, from),
-      lte(transactions.occurredOn, to),
+      gte(budgetDate, from),
+      lte(budgetDate, to),
     ]
     if (kind) filters.push(eq(transactions.kind, kind))
 
@@ -118,7 +118,7 @@ export const reportsRoute = new Hono<AppContext>()
     const rows = await c
       .get('db')
       .select({
-        month: sql<string>`to_char(${transactions.occurredOn}, 'YYYY-MM')`,
+        month: sql<string>`to_char(${budgetDate}, 'YYYY-MM')`,
         income: sql`COALESCE(SUM(${transactions.amountCents}) FILTER (WHERE ${transactions.kind} = 'income'), 0)`,
         expense: sql`COALESCE(SUM(${transactions.amountCents}) FILTER (WHERE ${transactions.kind} = 'expense'), 0)`,
       })
@@ -126,11 +126,11 @@ export const reportsRoute = new Hono<AppContext>()
       .where(
         and(
           eq(transactions.userId, c.get('userId')),
-          gte(transactions.occurredOn, monthBounds(since).from),
-          lte(transactions.occurredOn, monthBounds(until).to),
+          gte(budgetDate, monthBounds(since).from),
+          lte(budgetDate, monthBounds(until).to),
         ),
       )
-      .groupBy(sql`to_char(${transactions.occurredOn}, 'YYYY-MM')`)
+      .groupBy(sql`to_char(${budgetDate}, 'YYYY-MM')`)
 
     // Meses sem lançamento precisam aparecer zerados: um gráfico de barras que
     // pula meses vazios distorce a leitura da evolução.
@@ -239,7 +239,7 @@ async function installmentForecast(db: Db, userId: string, month: string) {
     .where(and(eq(bankAccounts.userId, userId), isNotNull(bankAccounts.upcomingInstallments)))
   const due = accounts
     .flatMap((a) => a.upcoming ?? [])
-    .filter((i) => i.occurredOn.startsWith(month) && i.occurredOn > today)
+    .filter((i) => (i.budgetOn ?? i.occurredOn).startsWith(month) && i.occurredOn > today)
   if (due.length === 0) return []
 
   const imported = new Set(

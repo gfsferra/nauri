@@ -1,6 +1,7 @@
 import {
   amountToCents,
   bankCodeOf,
+  budgetOnOf,
   bankLabelOf,
   categoryFor,
   mapPluggyTransaction,
@@ -95,6 +96,7 @@ describe('mapPluggyTransaction: conta corrente', () => {
         categoryName: 'Mercado',
         isPending: false,
         isInstallment: false,
+        budgetOn: null,
       },
     })
   })
@@ -383,5 +385,37 @@ describe('parcelas e fatura do cartão', () => {
       ['dez', '2026-12-27', 'Lazer', true],
       ['jan', '2027-01-27', 'Lazer', true],
     ])
+  })
+})
+
+describe('budgetOnOf: mês do orçamento das compras no cartão', () => {
+  it('compra na fatura que vence em dezembro conta em novembro', () => {
+    expect(budgetOnOf('2026-11-15', '2026-12')).toBeNull()
+  })
+
+  it('a parcela de 31/10 na fatura de dezembro vai para 1/11', () => {
+    expect(budgetOnOf('2026-10-31', '2026-12')).toBe('2026-11-01')
+  })
+
+  it('compra depois do mês do orçamento vai para o último dia dele', () => {
+    expect(budgetOnOf('2026-12-01', '2026-12')).toBe('2026-11-30')
+  })
+
+  it('a virada do ano: fatura de janeiro conta em dezembro', () => {
+    expect(budgetOnOf('2026-12-31', '2027-01')).toBeNull()
+    expect(budgetOnOf('2027-01-01', '2027-01')).toBe('2026-12-31')
+  })
+
+  it('sem mês da fatura, vale a própria data', () => {
+    expect(budgetOnOf('2026-10-31', null)).toBeNull()
+    expect(budgetOnOf('2026-10-31', 'lixo')).toBeNull()
+  })
+
+  it('o mapeamento do cartão já traz o dia do orçamento; a conta corrente não', () => {
+    const parcela = tx({ date: '2026-10-31T03:00:00.000Z', creditCardMetadata: { billForecastDate: '2026-12' } })
+    const card = mapPluggyTransaction(parcela, 'CREDIT', TODAY)
+    expect(card.ok && card.value.budgetOn).toBe('2026-11-01')
+    const bank = mapPluggyTransaction({ ...parcela, amount: -10 }, 'BANK', TODAY)
+    expect(bank.ok && bank.value.budgetOn).toBeNull()
   })
 })

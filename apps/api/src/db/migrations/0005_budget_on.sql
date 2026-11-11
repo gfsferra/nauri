@@ -1,0 +1,2 @@
+ALTER TABLE "transactions" ADD COLUMN "budget_on" date;--> statement-breakpoint
+CREATE INDEX "transactions_user_budget_idx" ON "transactions" USING btree ("user_id",coalesce("budget_on", "occurred_on"));

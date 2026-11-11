@@ -8,7 +8,7 @@ import { and, desc, eq, gte, lte, sql, type SQL } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { Db } from '../db/client.js'
-import { categories, openFinanceIgnored, transactions } from '../db/schema.js'
+import { budgetDate, categories, openFinanceIgnored, transactions } from '../db/schema.js'
 import type { AppContext } from '../env.js'
 import { materializeRecurrences } from '../lib/materialize.js'
 import { requireAuth } from '../middleware.js'
@@ -57,8 +57,10 @@ export const transactionsRoute = new Hono<AppContext>()
     }
 
     const filters: SQL[] = [eq(transactions.userId, userId)]
-    if (from) filters.push(gte(transactions.occurredOn, from))
-    if (to) filters.push(lte(transactions.occurredOn, to))
+    // O mês do orçamento, não o da compra: a parcela de 31/10 que vai na
+    // fatura de dezembro aparece (e soma) em novembro. Ver `budgetDate`.
+    if (from) filters.push(gte(budgetDate, from))
+    if (to) filters.push(lte(budgetDate, to))
     if (kind) filters.push(eq(transactions.kind, kind))
     if (categoryId) filters.push(eq(transactions.categoryId, categoryId))
 

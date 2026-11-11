@@ -1,4 +1,12 @@
-import { addDays, clampDayToMonth, makeIso, parseAmountToCents, todayInTimezone } from '@nauri/contracts'
+import {
+  addDays,
+  addMonthsToMonth,
+  clampDayToMonth,
+  makeIso,
+  monthBounds,
+  parseAmountToCents,
+  todayInTimezone,
+} from '@nauri/contracts'
 
 /**
  * Conversão de uma transação da Pluggy (Open Finance, via Meu Pluggy) num
@@ -43,6 +51,8 @@ export interface MappedTransaction {
   categoryName: string
   isPending: boolean
   isInstallment: boolean
+  /** Ver `budgetOnOf`. Null quando o mês do orçamento é o da própria data. */
+  budgetOn: string | null
 }
 
 export type SkipReason =
@@ -193,6 +203,26 @@ export function bankLabelOf(accountName: string): string {
   return accountName.split(' - ')[0]!.trim()
 }
 
+/**
+ * O dia que conta para o orçamento de uma compra no cartão. A fatura que
+ * vence num mês é paga com o salário do mês anterior, então a compra pesa no
+ * mês anterior ao vencimento da fatura dela: a parcela de 31/10 na fatura que
+ * vence em dezembro conta em novembro.
+ *
+ * Devolve null quando a data já está nesse mês (o caso comum) e, fora dele, o
+ * primeiro ou o último dia do mês, o mais perto da data real.
+ *
+ * @param billMonth mês do vencimento da fatura ("2026-12"), da Pluggy.
+ */
+export function budgetOnOf(occurredOn: string, billMonth: string | null | undefined): string | null {
+  const bill = billMonth?.slice(0, 7)
+  if (!bill || !/^\d{4}-\d{2}$/.test(bill)) return null
+  const month = addMonthsToMonth(bill, -1)
+  if (occurredOn.startsWith(month)) return null
+  const { from, to } = monthBounds(month)
+  return occurredOn < from ? from : to
+}
+
 function skipReason(
   tx: PluggyTransaction,
   accountType: PluggyAccountType,
@@ -255,6 +285,7 @@ export function mapPluggyTransaction(
       categoryName: categoryFor(kind, tx.category),
       isPending: tx.status === 'PENDING',
       isInstallment: (tx.creditCardMetadata?.totalInstallments ?? 0) > 1,
+      budgetOn: accountType === 'CREDIT' ? budgetOnOf(occurredOn, tx.creditCardMetadata?.billForecastDate) : null,
     },
   }
 }

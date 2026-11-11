@@ -211,6 +211,14 @@ export const transactions = pgTable(
      * uma compra parcelada com uma assinatura.
      */
     isInstallment: boolean('is_installment').notNull().default(false),
+    /**
+     * Dia que conta para o orçamento, quando difere de `occurredOn`. A compra
+     * no cartão pesa no mês anterior ao vencimento da fatura dela, que é o mês
+     * cujo salário paga essa fatura: a parcela de 31/10 na fatura que vence em
+     * 9/12 conta em novembro (vira 1/11 aqui). Null = o próprio `occurredOn`.
+     * Toda soma por mês usa `budgetDate` (abaixo), nunca `occurredOn` direto.
+     */
+    budgetOn: date('budget_on'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -231,6 +239,7 @@ export const transactions = pgTable(
     // distintos, então lançamentos manuais não colidem.
     uniqueIndex('transactions_user_external_uq').on(t.userId, t.externalId),
     index('transactions_user_date_idx').on(t.userId, t.occurredOn.desc()),
+    index('transactions_user_budget_idx').on(t.userId, sql`coalesce(${t.budgetOn}, ${t.occurredOn})`),
     index('transactions_user_category_idx').on(t.userId, t.categoryId),
     check('transactions_amount_positive', sql`${t.amountCents} > 0`),
   ],
@@ -289,6 +298,8 @@ export const bankConnections = pgTable('bank_connections', {
 export interface UpcomingInstallment {
   externalId: string
   occurredOn: string
+  /** Ver `transactions.budgetOn`. Ausente nas leituras antigas. */
+  budgetOn?: string | null
   amountCents: number
   description: string
   categoryName: string
@@ -346,3 +357,6 @@ export type Category = typeof categories.$inferSelect
 export type Transaction = typeof transactions.$inferSelect
 export type Recurrence = typeof recurrences.$inferSelect
 export type Budget = typeof budgets.$inferSelect
+
+/** A data que vale para somas por mês: `budget_on` quando houver, senão `occurred_on`. */
+export const budgetDate = sql<string>`coalesce(${transactions.budgetOn}, ${transactions.occurredOn})`

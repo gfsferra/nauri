@@ -3,7 +3,7 @@ import { budgetUpsertSchema } from '@nauri/contracts'
 import { and, eq, gte, lte, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { budgets, categories, transactions } from '../db/schema.js'
+import { budgetDate, budgets, categories, transactions } from '../db/schema.js'
 import type { AppContext } from '../env.js'
 import { toCents } from '../lib/cents.js'
 import { monthBounds } from '@nauri/contracts'
@@ -39,7 +39,7 @@ export const budgetsRoute = new Hono<AppContext>()
           FROM ${transactions}
           WHERE ${transactions.userId} = ${userId}
             AND ${transactions.categoryId} = ${budgets.categoryId}
-            AND ${transactions.occurredOn} BETWEEN ${from} AND ${to}
+            AND ${budgetDate} BETWEEN ${from} AND ${to}
         )`,
       })
       .from(budgets)
