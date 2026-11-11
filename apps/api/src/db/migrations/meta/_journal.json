@@ -29,6 +29,13 @@
       "when": 1794389966682,
       "tag": "0003_open_finance",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794407394814,
+      "tag": "0004_card_bill",
+      "breakpoints": true
     }
   ]
 }

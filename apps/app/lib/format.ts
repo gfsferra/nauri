@@ -51,6 +51,16 @@ export function formatDate(iso: string, currentYear = new Date().getFullYear()):
   return y === currentYear ? base : `${base} de ${y}`
 }
 
+/** '2026-11-11T14:02:00Z' → 'há 12 min' / 'há 3 h' / '10 de novembro' */
+export function sinceLabel(iso: string, now = Date.now()): string {
+  const minutes = Math.round((now - new Date(iso).getTime()) / 60_000)
+  if (minutes < 1) return 'agora'
+  if (minutes < 60) return `há ${minutes} min`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `há ${hours} h`
+  return formatDate(new Date(iso).toISOString().slice(0, 10))
+}
+
 /** '2026-08' → 'agosto de 2026' */
 export function formatMonth(month: string): string {
   const [y, m] = month.split('-').map(Number) as [number, number]

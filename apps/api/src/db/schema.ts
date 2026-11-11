@@ -7,6 +7,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   smallint,
@@ -204,6 +205,12 @@ export const transactions = pgTable(
     }),
     /** Compra do cartão que ainda não fechou na fatura (Open Finance). */
     isPending: boolean('is_pending').notNull().default(false),
+    /**
+     * Parcela de compra parcelada no cartão (Open Finance). Nem toda parcela
+     * traz "2/4" na descrição; sem isto, a previsão de contas fixas confundiria
+     * uma compra parcelada com uma assinatura.
+     */
+    isInstallment: boolean('is_installment').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -279,6 +286,14 @@ export const bankConnections = pgTable('bank_connections', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+export interface UpcomingInstallment {
+  externalId: string
+  occurredOn: string
+  amountCents: number
+  description: string
+  categoryName: string
+}
+
 export const bankAccounts = pgTable(
   'bank_accounts',
   {
@@ -294,6 +309,17 @@ export const bankAccounts = pgTable(
     /** BANK (conta corrente) ou CREDIT (cartão): o sinal dos valores muda entre os dois. */
     type: text('type').notNull(),
     name: text('name').notNull(),
+    /** Cartão: valor da fatura em aberto (a próxima a vencer), na última leitura. */
+    billAmountCents: bigint('bill_amount_cents', { mode: 'number' }),
+    /** Cartão: vencimento da fatura em aberto. */
+    billDueOn: date('bill_due_on'),
+    /**
+     * Cartão: parcelas futuras já conhecidas, que viram previsão no mês de
+     * cada uma. `[{ externalId, occurredOn, amountCents, description, categoryName }]`.
+     */
+    upcomingInstallments: jsonb('upcoming_installments').$type<UpcomingInstallment[]>(),
+    /** Quando a fatura e as parcelas acima foram lidas. */
+    billUpdatedAt: timestamp('bill_updated_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('bank_accounts_user_idx').on(t.userId)],
