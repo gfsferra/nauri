@@ -11,6 +11,7 @@ import { accountRoute } from './routes/account.js'
 import { budgetsRoute } from './routes/budgets.js'
 import { categoriesRoute } from './routes/categories.js'
 import { importRoute } from './routes/import.js'
+import { investmentsRoute } from './routes/investments.js'
 import { openFinanceRoute } from './routes/open-finance.js'
 import { recurrencesRoute } from './routes/recurrences.js'
 import { reportsRoute } from './routes/reports.js'
@@ -74,6 +75,7 @@ const routes = app
   .route('/api/import', importRoute)
   .route('/api/account', accountRoute)
   .route('/api/open-finance', openFinanceRoute)
+  .route('/api/investments', investmentsRoute)
 
 app.onError((error, c) => {
   console.error('Erro não tratado:', error)

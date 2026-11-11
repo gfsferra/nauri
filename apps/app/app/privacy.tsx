@@ -29,7 +29,7 @@ const sections: LegalSection[] = [
         ],
       },
       'Não coletamos dados bancários, de cartão ou senhas de bancos, e o Nauri não se conecta à sua conta bancária. Não pedimos CPF nem documentos.',
-      'A única exceção é a conta do próprio mantenedor do Nauri, que importa os lançamentos das contas dele por Open Finance, por meio da Pluggy (plano de uso pessoal). Essa integração não está disponível para os demais usuários e não envolve dados de mais ninguém.',
+      'A única exceção é a conta do próprio mantenedor do Nauri, que importa os lançamentos e os investimentos das contas dele por Open Finance, por meio da Pluggy (plano de uso pessoal). Essa integração não está disponível para os demais usuários e não envolve dados de mais ninguém.',
     ],
   },
   {
