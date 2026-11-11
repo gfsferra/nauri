@@ -23,6 +23,7 @@ import {
   SectionLabel,
   StatTile,
   Title,
+  useTabBarSpace,
 } from '@/components/ui'
 import { client, unwrap } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
@@ -36,6 +37,7 @@ type Sheet = { headers: string[]; records: Array<Record<string, string>> }
 
 export default function Import() {
   const theme = useTheme()
+  const tabBarSpace = useTabBarSpace()
   const [sheet, setSheet] = useState<Sheet | null>(null)
   const [expense, setExpense] = useState<ColumnMap | null>(null)
   const [income, setIncome] = useState<ColumnMap | null>(null)
@@ -121,7 +123,7 @@ export default function Import() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: tabBarSpace }}>
         <Gutter style={{ gap: spacing.xl }}>
           <View style={{ gap: 6 }}>
             <Title>Importar planilha</Title>

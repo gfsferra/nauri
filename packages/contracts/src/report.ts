@@ -19,6 +19,8 @@ export const summarySchema = z.object({
       amountCents: z.number().int(),
       description: z.string(),
       categoryName: z.string(),
+      categoryColor: z.string().nullable(),
+      categoryIcon: z.string().nullable(),
     }),
   ),
 })

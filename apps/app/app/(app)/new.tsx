@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native'
-import { Button, Chip, ErrorBanner, Gutter, Screen, SectionLabel, Title } from '@/components/ui'
+import { Button, Chip, ErrorBanner, Gutter, Screen, SectionLabel, Title, useTabBarSpace } from '@/components/ui'
 import { client, unwrap } from '@/lib/api'
 import { formatCents, formatDate, popDigit, pushDigit, today } from '@/lib/format'
 import { radius, spacing, tabular, type, useTheme } from '@/lib/theme'
@@ -19,6 +19,7 @@ function shiftDate(iso: string, days: number): string {
 
 export default function NewTransaction() {
   const theme = useTheme()
+  const tabBarSpace = useTabBarSpace()
   const router = useRouter()
   const queryClient = useQueryClient()
 
@@ -74,7 +75,7 @@ export default function NewTransaction() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl, gap: spacing.xl }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: tabBarSpace, gap: spacing.xl }}>
         <Gutter style={{ gap: spacing.lg }}>
           <Title>Novo lançamento</Title>
 

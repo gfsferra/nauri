@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Redirect, Tabs } from 'expo-router'
+import { Platform, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { TAB_BAR_HEIGHT, tabBarBottom } from '@/components/ui'
 import { useSession } from '@/lib/auth-client'
-import { useTheme } from '@/lib/theme'
+import { spacing, useTheme } from '@/lib/theme'
 
 export default function AppLayout() {
   const { data, isPending } = useSession()
@@ -16,23 +18,65 @@ export default function AppLayout() {
 
   return (
     <Tabs
+      // A barra é posicionada à mão (flutuando acima do indicador de início),
+      // então o inset de baixo não entra no padding interno dela.
+      safeAreaInsets={{ bottom: 0 }}
       screenOptions={{
         headerShown: false,
-        // A barra do DS: régua de 1px, fundo quase opaco e destaque só no item
-        // atual — nada de pílula ou sombra sob os ícones.
         tabBarActiveTintColor: theme.accentText,
         tabBarInactiveTintColor: theme.text3,
+        // Pílula de vidro flutuante, no estilo das barras do iOS: o conteúdo
+        // rola por baixo e aparece desfocado. Cada tela reserva o espaço no
+        // fim com `useTabBarSpace`.
         tabBarStyle: {
-          backgroundColor: theme.navBg,
-          borderTopColor: theme.border,
+          position: 'absolute',
+          left: spacing.gutter,
+          right: spacing.gutter,
+          bottom: tabBarBottom(insets.bottom),
+          height: TAB_BAR_HEIGHT,
+          paddingHorizontal: 6,
+          paddingTop: 0,
+          paddingBottom: 0,
+          borderRadius: TAB_BAR_HEIGHT / 2,
           borderTopWidth: 1,
+          borderWidth: 1,
+          borderColor: theme.glassBorder,
+          borderTopColor: theme.glassBorder,
+          backgroundColor: 'transparent',
           elevation: 0,
-          // Só a altura. O BottomTabItem já traz `paddingVertical: 7`, então
-          // somar padding aqui encolhe a caixa de conteúdo e corta o rótulo —
-          // o item precisa de 7 + ícone 21 + rótulo 13 + 7 = 48px. A barra
-          // reserva 58 e deixa o inset do indicador de home por fora (0 na
-          // web, ~34 num iPhone sem botão).
-          height: 58 + insets.bottom,
+          // Sombra e desfoque só existem como CSS na web, que é onde o app
+          // roda (PWA). No nativo a barra fica translúcida, sem desfoque.
+          ...(Platform.OS === 'web' ? ({ boxShadow: theme.glassShadow } as object) : null),
+        },
+        tabBarBackground: () => (
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                borderRadius: TAB_BAR_HEIGHT / 2,
+                overflow: 'hidden',
+                backgroundColor: theme.glassBg,
+              },
+              Platform.OS === 'web'
+                ? ({
+                    backdropFilter: 'blur(22px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(22px) saturate(180%)',
+                  } as object)
+                : null,
+            ]}
+          />
+        ),
+        // A aba atual ganha uma cápsula, como no iOS: dá para saber onde se
+        // está sem depender só da cor.
+        tabBarActiveBackgroundColor: theme.accentSoft,
+        // Sem padding no item: a cor da aba atual fica no elemento de dentro, e
+        // com padding ela não preencheria a cápsula arredondada.
+        tabBarItemStyle: {
+          marginVertical: 6,
+          marginHorizontal: 2,
+          borderRadius: (TAB_BAR_HEIGHT - 14) / 2,
+          paddingVertical: 0,
+          overflow: 'hidden',
         },
         tabBarLabelStyle: { fontSize: 10.5, fontWeight: '600', letterSpacing: 0.1 },
       }}

@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons'
 import { type ReactNode, useEffect, useRef } from 'react'
 import {
   Animated,
@@ -491,6 +492,63 @@ export function Avatar({ name, tone = 0, size = 42 }: { name: string; tone?: num
       </Text>
     </View>
   )
+}
+
+/**
+ * Ícone da categoria num quadrado com a cor dela, suave. Usa a versão
+ * "outline" do Ionicons quando existe, que combina com o resto do app; sem
+ * ícone (categoria criada à mão), cai na etiqueta.
+ */
+export function CategoryIcon({
+  icon,
+  color,
+  size = 42,
+}: {
+  icon: string | null | undefined
+  color: string | null | undefined
+  size?: number
+}) {
+  const theme = useTheme()
+  const glyphs = Ionicons.glyphMap as Record<string, number>
+  const base = icon && glyphs[icon] ? icon : 'pricetag'
+  const name = (glyphs[`${base}-outline`] ? `${base}-outline` : base) as keyof typeof Ionicons.glyphMap
+  const tint = color && /^#[0-9a-f]{6}$/i.test(color) ? color : theme.text2
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size < 36 ? radius.sm : radius.md,
+        flexShrink: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+        // A cor da categoria a 16%: dá para reconhecer de relance sem virar
+        // um arco-íris na lista.
+        backgroundColor: `${tint}29`,
+      }}
+    >
+      <Ionicons name={name} size={size * 0.46} color={tint} />
+    </View>
+  )
+}
+
+/* ─────────────────────── barra de abas flutuante ─────────────────────── */
+
+/** Altura da barra de abas e a folga entre ela e a borda de baixo. */
+export const TAB_BAR_HEIGHT = 64
+export function tabBarBottom(insetBottom: number): number {
+  // No iPhone a barra fica logo acima do indicador de início; sem inset
+  // (navegador), a 14px da borda.
+  return insetBottom > 0 ? Math.max(insetBottom - 6, 12) : 14
+}
+
+/**
+ * Espaço a deixar no fim de cada tela: a barra flutua por cima do conteúdo,
+ * então o último item precisa poder rolar até acima dela.
+ */
+export function useTabBarSpace(): number {
+  const { bottom } = useSafeAreaInsets()
+  return TAB_BAR_HEIGHT + tabBarBottom(bottom) + spacing.xl
 }
 
 /** Cartão agrupado do DS: raio 20, filhos separados por régua de 1px. */

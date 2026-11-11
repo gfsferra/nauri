@@ -360,6 +360,12 @@ async function loadCategoryIds(db: Db, userId: string) {
  * Garante as categorias que faltam (o usuário pode ter renomeado ou apagado
  * uma padrão) e devolve o id de cada lançamento.
  */
+/** Cor e ícone das categorias que a sincronização cria (as padrão vêm do `seed.ts`). */
+const NEW_CATEGORY_LOOK: Record<string, { color: string; icon: string }> = {
+  Compras: { color: '#d946ef', icon: 'bag-handle' },
+  Serviços: { color: '#0ea5e9', icon: 'construct' },
+}
+
 async function resolveCategories(
   db: Db,
   userId: string,
@@ -374,7 +380,7 @@ async function resolveCategories(
   if (missing.size === 0) return
   await db
     .insert(categories)
-    .values([...missing.values()].map((c) => ({ userId, name: c.name, kind: c.kind })))
+    .values([...missing.values()].map((c) => ({ userId, name: c.name, kind: c.kind, ...NEW_CATEGORY_LOOK[c.name] })))
     .onConflictDoNothing()
   const fresh = await loadCategoryIds(db, userId)
   for (const [key, id] of fresh) categoryIds.set(key, id)

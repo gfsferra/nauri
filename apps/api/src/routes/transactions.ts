@@ -85,6 +85,7 @@ export const transactionsRoute = new Hono<AppContext>()
         categoryId: transactions.categoryId,
         categoryName: categories.name,
         categoryColor: categories.color,
+        categoryIcon: categories.icon,
         recurrenceId: transactions.recurrenceId,
         isPending: transactions.isPending,
         fromBank: sql<boolean>`${transactions.externalId} IS NOT NULL`,

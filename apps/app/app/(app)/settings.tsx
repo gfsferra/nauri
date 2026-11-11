@@ -10,6 +10,7 @@ import {
   Screen,
   SectionLabel,
   TrustNote,
+  useTabBarSpace,
 } from '@/components/ui'
 import { client, unwrap } from '@/lib/api'
 import { signOut, useSession } from '@/lib/auth-client'
@@ -101,6 +102,7 @@ function OpenFinanceSection() {
 
 export default function Settings() {
   const theme = useTheme()
+  const tabBarSpace = useTabBarSpace()
   const router = useRouter()
   const { data } = useSession()
 
@@ -143,7 +145,7 @@ export default function Settings() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl, gap: spacing.xxl }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: tabBarSpace, gap: spacing.xxl }}>
         {/* Cabeçalho de perfil do DS: inicial em quadrado de 60, nome em 19 e a
             identificação da conta logo abaixo, em cinza-médio. */}
         <Gutter style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
