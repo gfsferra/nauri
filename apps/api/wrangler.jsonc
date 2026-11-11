@@ -15,7 +15,9 @@
     "binding": "ASSETS",
     // Rota sem arquivo cai no app, que decide o que mostrar.
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/health"]
+    // `/__scheduled` só existe no `wrangler dev --test-scheduled`, para
+    // disparar o cron à mão; em produção o Hono responde 404.
+    "run_worker_first": ["/api/*", "/health", "/__scheduled"]
   },
   // Cria sozinho o registro de DNS e o certificado de nauri.app.
   "routes": [{ "pattern": "nauri.app", "custom_domain": true }],
@@ -26,13 +28,19 @@
 
   // Valores de produção. No `wrangler dev`, os de `.dev.vars` têm prioridade.
   // Os segredos (DATABASE_URL, BETTER_AUTH_SECRET, RESEND_API_KEY,
-  // INVITE_CODE) vão por `wrangler secret put`.
+  // INVITE_CODE) vão por `wrangler secret put`. Os do Open Finance também
+  // (PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET, PLUGGY_ITEM_ID,
+  // OPEN_FINANCE_USER_ID): o repositório é público.
   "vars": {
     "APP_URL": "https://nauri.app",
     "BETTER_AUTH_URL": "https://nauri.app",
     "MAIL_FROM": "Nauri <nao-responda@nauri.app>",
     "SIGNUP_MODE": "invite"
-  }
+  },
+
+  // Sincronização do Open Finance, de hora em hora (minuto 17, fora do pico
+  // da virada de hora). Sem os segredos do Open Finance ela não faz nada.
+  "triggers": { "crons": ["17 * * * *"] }
   // O rate limit de login e cadastro é o do Better Auth, com a contagem no
   // banco (lib/auth.ts). O binding da Cloudflare contava por data center, de
   // forma aproximada, e deixava passar dezenas de tentativas.

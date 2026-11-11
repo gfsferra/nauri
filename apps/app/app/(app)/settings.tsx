@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { Alert, Linking, Platform, ScrollView, Text, View } from 'react-native'
 import {
@@ -10,10 +11,102 @@ import {
   SectionLabel,
   TrustNote,
 } from '@/components/ui'
+import { client, unwrap } from '@/lib/api'
 import { signOut, useSession } from '@/lib/auth-client'
 import { API_URL } from '@/lib/config'
-import { toneOf } from '@/lib/format'
+import { formatDate, toneOf } from '@/lib/format'
 import { spacing, type, useTheme } from '@/lib/theme'
+
+/** '2026-11-11T14:02:00Z' → 'há 12 min' / 'há 3 h' / '10 de novembro' */
+function sinceLabel(iso: string, now = Date.now()): string {
+  const minutes = Math.round((now - new Date(iso).getTime()) / 60_000)
+  if (minutes < 1) return 'agora'
+  if (minutes < 60) return `há ${minutes} min`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `há ${hours} h`
+  return formatDate(new Date(iso).toISOString().slice(0, 10))
+}
+
+/**
+ * Open Finance (Meu Pluggy). Só aparece para o dono da conexão: para qualquer
+ * outro usuário a API responde `enabled: false` e a seção não existe.
+ */
+function OpenFinanceSection() {
+  const theme = useTheme()
+  const queryClient = useQueryClient()
+
+  const status = useQuery({
+    queryKey: ['open-finance'],
+    queryFn: async () => unwrap(await client['open-finance'].$get()),
+    // A sincronização de hora em hora acontece no servidor; reler de vez em
+    // quando mantém "há X min" honesto sem exigir recarregar a tela.
+    refetchInterval: 5 * 60_000,
+  })
+
+  const sync = useMutation({
+    mutationFn: async () => unwrap(await client['open-finance'].sync.$post()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['open-finance'] })
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      queryClient.invalidateQueries({ queryKey: ['summary'] })
+    },
+  })
+
+  const data = status.data
+  if (!data?.enabled) return null
+
+  const tile = (icon: keyof typeof Ionicons.glyphMap) => (
+    <Ionicons name={icon} size={17} color={theme.accentText} />
+  )
+
+  const connected = data.connected
+  const consentDays =
+    connected && data.consentExpiresAt
+      ? Math.floor((new Date(data.consentExpiresAt).getTime() - Date.now()) / 86_400_000)
+      : null
+
+  let note: string
+  if (sync.isError) note = sync.error.message
+  else if (!connected) note = 'Ainda não sincronizado · toque em Sincronizar agora'
+  else if (data.lastError) note = 'A última tentativa falhou · tente sincronizar de novo'
+  else if (!data.historyComplete)
+    note = `Importando o histórico aos poucos · ${data.importedCount} lançamentos até agora`
+  else if (consentDays !== null && consentDays <= 30)
+    note = `O acesso ao banco vence em ${Math.max(consentDays, 0)} dia(s) · renove no Meu Pluggy`
+  else if (data.consentExpiresAt)
+    note = `Acesso autorizado até ${formatDate(data.consentExpiresAt.slice(0, 10))}`
+  else note = 'Dados do banco atualizados uma vez por dia'
+
+  const accountLabel = (type: string) => (type === 'CREDIT' ? 'Cartão de crédito' : 'Conta corrente')
+
+  return (
+    <Gutter style={{ gap: spacing.sm }}>
+      <SectionLabel>Banco conectado</SectionLabel>
+      <ListGroup>
+        {connected
+          ? data.accounts.map((account) => (
+              <ListRow
+                key={`${account.type}:${account.name}`}
+                icon={tile(account.type === 'CREDIT' ? 'card-outline' : 'business-outline')}
+                label={accountLabel(account.type)}
+                detail="via Open Finance"
+              />
+            ))
+          : null}
+        <ListRow
+          icon={tile('sync-outline')}
+          label={sync.isPending ? 'Sincronizando…' : 'Sincronizar agora'}
+          detail={connected && data.lastSyncedAt ? sinceLabel(data.lastSyncedAt) : undefined}
+          onPress={sync.isPending ? undefined : () => sync.mutate()}
+          last
+        />
+      </ListGroup>
+      <TrustNote icon={<Ionicons name="lock-closed-outline" size={13} color={theme.text3} />}>
+        {note}
+      </TrustNote>
+    </Gutter>
+  )
+}
 
 export default function Settings() {
   const theme = useTheme()
@@ -90,6 +183,8 @@ export default function Settings() {
             />
           </ListGroup>
         </Gutter>
+
+        <OpenFinanceSection />
 
         <Gutter style={{ gap: spacing.sm }}>
           <SectionLabel>Conta</SectionLabel>

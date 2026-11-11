@@ -14,6 +14,17 @@ export type Env = {
   /** 'open' libera cadastro; 'invite' exige INVITE_CODE. Ver Fase 7 do plano. */
   SIGNUP_MODE?: 'open' | 'invite'
   INVITE_CODE?: string
+  /*
+   * Open Finance via Meu Pluggy (opcional: sem estas quatro, o recurso fica
+   * desligado). Todos vão como segredo, não como `vars`: o repositório é
+   * público e eles identificam a conta bancária do dono.
+   */
+  PLUGGY_CLIENT_ID?: string
+  PLUGGY_CLIENT_SECRET?: string
+  /** ID da conexão (item) do conector MeuPluggy. */
+  PLUGGY_ITEM_ID?: string
+  /** Único usuário do Nauri que recebe os dados do banco (plano de uso pessoal). */
+  OPEN_FINANCE_USER_ID?: string
 }
 
 export type Variables = {

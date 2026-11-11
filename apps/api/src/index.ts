@@ -2,13 +2,16 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { createMiddleware } from 'hono/factory'
 import { logger } from 'hono/logger'
-import type { AppContext } from './env.js'
+import { createDb, createPool } from './db/client.js'
+import type { AppContext, Env } from './env.js'
+import { openFinanceConfig, syncOpenFinance } from './lib/open-finance-sync.js'
 import { translateRateLimit } from './lib/rate-limit.js'
 import { withServices } from './middleware.js'
 import { accountRoute } from './routes/account.js'
 import { budgetsRoute } from './routes/budgets.js'
 import { categoriesRoute } from './routes/categories.js'
 import { importRoute } from './routes/import.js'
+import { openFinanceRoute } from './routes/open-finance.js'
 import { recurrencesRoute } from './routes/recurrences.js'
 import { reportsRoute } from './routes/reports.js'
 import { transactionsRoute } from './routes/transactions.js'
@@ -70,6 +73,7 @@ const routes = app
   .route('/api/budgets', budgetsRoute)
   .route('/api/import', importRoute)
   .route('/api/account', accountRoute)
+  .route('/api/open-finance', openFinanceRoute)
 
 app.onError((error, c) => {
   console.error('Erro não tratado:', error)
@@ -80,4 +84,28 @@ app.onError((error, c) => {
 /** Tipo consumido pelo cliente RPC do app — é o que dá tipagem ponta a ponta. */
 export type AppType = typeof routes
 
-export default app
+/**
+ * O Worker atende HTTP pelo Hono e, de hora em hora, a sincronização do Open
+ * Finance (Cron Trigger em wrangler.jsonc). Cada execução faz uma janela só;
+ * ver lib/open-finance-sync.ts.
+ */
+export default {
+  fetch: app.fetch,
+  async scheduled(
+    _controller: unknown,
+    env: Env,
+    ctx: { waitUntil(promise: Promise<unknown>): void },
+  ) {
+    const config = openFinanceConfig(env)
+    if (!config) return
+    const pool = createPool(env.DATABASE_URL)
+    try {
+      const result = await syncOpenFinance(createDb(pool), config)
+      console.log('Open Finance:', JSON.stringify(result))
+    } catch (error) {
+      console.error('Falha na sincronização do Open Finance:', error)
+    } finally {
+      ctx.waitUntil(pool.end().catch(() => {}))
+    }
+  },
+}

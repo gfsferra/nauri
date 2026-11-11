@@ -41,6 +41,8 @@ type Row = {
   categoryName: string
   categoryColor: string
   recurrenceId: string | null
+  /** Compra do cartão que ainda não fechou na fatura (veio do Open Finance). */
+  isPending?: boolean
 }
 
 export default function Home() {
@@ -356,6 +358,7 @@ export default function Home() {
                 <Text style={{ ...type.caption, color: theme.text2, marginTop: 2 }} numberOfLines={1}>
                   {item.categoryName}
                   {item.recurrenceId ? ' · recorrente' : ''}
+                  {item.isPending ? ' · pendente' : ''}
                 </Text>
               </View>
               <Amount

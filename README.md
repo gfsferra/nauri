@@ -93,6 +93,57 @@ INVITE_CODE="algum-código"
 
 O schema já é multiusuário; isto só adia a abertura pública.
 
+## Open Finance (Meu Pluggy)
+
+O dono do Nauri importa a conta corrente e o cartão do próprio banco pelo
+[Meu Pluggy](https://www.pluggy.ai/meu-pluggy), o plano gratuito de **uso
+pessoal** da Pluggy. Por ser uso pessoal, o recurso existe para **uma conta
+só** (`OPEN_FINANCE_USER_ID`). Para os demais usuários a API responde
+`enabled: false` e a seção nem aparece no Perfil. Abrir para outras pessoas
+exige o plano pago da Pluggy.
+
+**Como os dados chegam**
+- Os bancos são conectados no site do Meu Pluggy. No painel da Pluggy
+  (dashboard.pluggy.ai), a aplicação "Nauri" tem a conexão do conector
+  MeuPluggy, criada pela página de demonstração ("Conectar Conta" →
+  MeuPluggy).
+- A Pluggy atualiza essa conexão sozinha a cada 24 h, e ela não aceita
+  atualização manual.
+- Um Cron Trigger roda de hora em hora (`wrangler.jsonc`) e processa uma janela
+  só por execução (`planSync` em `lib/open-finance.ts`):
+  - os últimos 35 dias, quando a Pluggy tem dado novo;
+  - senão, uma fatia de um mês do histórico de 12 meses.
+
+  Nenhuma execução carrega o ano inteiro, o que estouraria o limite de CPU do
+  plano gratuito do Workers.
+- "Sincronizar agora", no Perfil, força a leitura dos últimos 35 dias.
+
+**Regras da conversão** (`lib/open-finance.ts`, com testes):
+- **Datas:** convertidas de UTC para o horário de São Paulo.
+- **Valores:** em centavos, pelo parser em string.
+- **Sinal:** invertido no cartão (lá a compra vem positiva).
+- **Ficam de fora:**
+  - o pagamento da fatura, dos dois lados;
+  - as transferências entre contas do próprio titular;
+  - a aplicação e o resgate automáticos;
+  - as parcelas futuras, que entram quando a data chega.
+- **Categorias:** as da Pluggy viram as do Nauri; "Compras" e "Serviços" são
+  criadas na primeira sincronização.
+- **Compras pendentes:** entram marcadas como "pendente". A pendente que some
+  da Pluggy (virou definitiva com outro ID) é removida.
+- **Edições do usuário:** a sincronização atualiza só valor, data e status;
+  categoria e descrição editadas ficam como estão.
+- **Exclusões:** um lançamento do banco apagado pelo usuário vai para
+  `open_finance_ignored` e não volta.
+
+**Variáveis** (todas como segredo: o repositório é público):
+`PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET`, `PLUGGY_ITEM_ID` e
+`OPEN_FINANCE_USER_ID`. Sem as quatro, o recurso fica desligado. No
+`wrangler dev --test-scheduled`, o cron dispara em `GET /__scheduled`.
+
+O acesso autorizado ao banco vence em 12 meses. A partir de 30 dias antes do
+vencimento, o Perfil avisa para renovar no Meu Pluggy.
+
 ## Deploy
 
 App web e API vão no **mesmo Worker**, em `https://nauri.app`: os arquivos do
