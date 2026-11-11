@@ -17,6 +17,8 @@ import {
   type PluggyTransaction,
   type SkipReason,
 } from './open-finance.js'
+import { signedCents } from './investments.js'
+import { syncInvestments, writeWealthSnapshot, type InvestmentSyncResult } from './investments-sync.js'
 import { createPluggyClient, type PluggyAccount, type PluggyClient, type PluggyItem } from './pluggy.js'
 
 /**
@@ -69,6 +71,8 @@ export interface ConnectionSyncResult {
 
 export interface SyncResult {
   connections: ConnectionSyncResult[]
+  /** Só as conexões cujos investimentos foram lidos nesta execução. */
+  investments: Array<{ itemId: string; error?: string } & Partial<InvestmentSyncResult>>
 }
 
 type Connection = typeof bankConnections.$inferSelect
@@ -153,7 +157,69 @@ export async function syncOpenFinance(
   // Uma conexão com problema não derruba as outras; só falha de vez se
   // nenhuma funcionou.
   if (firstError && results.every((r) => r.error)) throw firstError
-  return { connections: results }
+
+  const investmentResults = await syncAllInvestments(db, client, remote, results, {
+    userId: config.userId,
+    manual: options.manual ?? false,
+    now,
+    today,
+  })
+  return { connections: results, investments: investmentResults }
+}
+
+/**
+ * Investimentos e a foto do patrimônio, uma vez por atualização da Pluggy.
+ * No cron, só numa execução em que a conexão não teve transação para ler:
+ * a leitura das transações e a dos investimentos juntas passariam do limite
+ * de CPU e de chamadas do plano gratuito. Como a Pluggy atualiza uma vez por
+ * dia, a leitura dos investimentos acontece na hora seguinte à das transações.
+ * O botão lê na hora.
+ */
+async function syncAllInvestments(
+  db: Db,
+  client: PluggyClient,
+  remote: Array<{ connection: Connection; item: PluggyItem; accounts: PluggyAccount[] }>,
+  results: ConnectionSyncResult[],
+  ctx: { userId: string; manual: boolean; now: Date; today: string },
+) {
+  const out: SyncResult['investments'] = []
+  for (const { connection, item, accounts } of remote) {
+    const result = results.find((r) => r.itemId === connection.itemId)
+    if (!result || result.error) continue
+    const providerAt = item.lastUpdatedAt ? new Date(item.lastUpdatedAt) : ctx.now
+    const due = !connection.investmentsSyncedAt || providerAt > connection.investmentsSyncedAt
+    if (!due || (!ctx.manual && result.plan !== 'idle')) continue
+    try {
+      // O saldo das contas entra na foto do patrimônio junto com os investimentos.
+      await upsertAccounts(db, ctx.userId, connection.id, accounts)
+      const r = await syncInvestments(db, client, {
+        userId: ctx.userId,
+        connectionId: connection.id,
+        itemId: connection.itemId,
+        now: ctx.now,
+      })
+      if (r.complete) {
+        await db
+          .update(bankConnections)
+          .set({ investmentsSyncedAt: providerAt })
+          .where(eq(bankConnections.id, connection.id))
+      }
+      out.push({ itemId: connection.itemId, ...r })
+    } catch (error) {
+      // Falha nos investimentos não apaga o sucesso das transações: fica no
+      // resultado e a próxima execução tenta de novo.
+      out.push({ itemId: connection.itemId, error: errorMessage(error) })
+    }
+  }
+  if (out.some((r) => !r.error)) {
+    await writeWealthSnapshot(
+      db,
+      ctx.userId,
+      remote.map((r) => r.connection.id),
+      ctx.today,
+    )
+  }
+  return out
 }
 
 async function syncConnection(
@@ -340,9 +406,13 @@ async function upsertAccounts(
         externalId: a.id,
         type: a.type,
         name: a.name,
+        balanceCents: typeof a.balance === 'number' ? signedCents(a.balance) : null,
       })),
     )
-    .onConflictDoUpdate({ target: bankAccounts.externalId, set: { name: sql`excluded.name` } })
+    .onConflictDoUpdate({
+      target: bankAccounts.externalId,
+      set: { name: sql`excluded.name`, balanceCents: sql`excluded.balance_cents` },
+    })
     .returning({ id: bankAccounts.id, externalId: bankAccounts.externalId, type: bankAccounts.type })
   return rows.map((r) => ({ ...r, type: r.type as PluggyAccountType }))
 }

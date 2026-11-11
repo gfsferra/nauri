@@ -1,0 +1,1 @@
+ALTER TABLE "investments" ADD COLUMN "movements_status" text;

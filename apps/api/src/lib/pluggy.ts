@@ -1,8 +1,8 @@
+import type { PluggyInvestment, PluggyInvestmentTransaction } from './investments.js'
 import type { PluggyAccountType, PluggyTransaction } from './open-finance.js'
 
 /**
- * Cliente mínimo da API da Pluggy: só as quatro chamadas que a sincronização
- * usa. `fetch` puro, sem SDK, para não puxar dependência de Node para o Worker.
+ * Cliente mínimo da API da Pluggy: só as chamadas que a sincronização usa. `fetch` puro, sem SDK, para não puxar dependência de Node para o Worker.
  */
 
 const API = 'https://api.pluggy.ai'
@@ -27,6 +27,8 @@ export interface PluggyAccount {
   id: string
   type: PluggyAccountType
   name: string
+  /** Conta corrente: o saldo. Cartão: o limite usado. Em reais. */
+  balance?: number | null
   /** Só na conta corrente. `transferNumber` é "banco/agência/conta". */
   bankData?: { transferNumber?: string | null } | null
   /** Só no cartão. `balanceDueDate` é o vencimento da fatura mais recente. */
@@ -85,6 +87,25 @@ export async function createPluggyClient(clientId: string, clientSecret: string,
       }
       return all
     },
+
+    /** Investimentos de uma conexão, ativos e resgatados (a v1 pagina por número). */
+    investments: (itemId: string) => paged<PluggyInvestment>(`/investments?itemId=${itemId}`),
+
+    /** Aportes, resgates e proventos de um investimento (até 12 meses atrás). */
+    investmentTransactions: (investmentId: string) =>
+      paged<PluggyInvestmentTransaction>(`/investments/${investmentId}/transactions`),
+  }
+
+  async function paged<T>(path: string): Promise<T[]> {
+    const all: T[] = []
+    const sep = path.includes('?') ? '&' : '?'
+    // Mesma trava do cursor da v2: nada de laço sem fim dentro do Worker.
+    for (let page = 1; page <= 10; page++) {
+      const body: { results: T[]; totalPages?: number } = await get(`${path}${sep}pageSize=500&page=${page}`)
+      all.push(...body.results)
+      if (!body.totalPages || page >= body.totalPages) break
+    }
+    return all
   }
 }
 

@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   date,
+  doublePrecision,
   foreignKey,
   index,
   integer,
@@ -292,6 +293,8 @@ export const bankConnections = pgTable('bank_connections', {
   /** Data mais antiga já importada; igual a `sync_from` quando o histórico terminou. */
   backfillCursor: date('backfill_cursor').notNull(),
   lastError: text('last_error'),
+  /** `lastUpdatedAt` da Pluggy na última leitura dos investimentos (uma vez por atualização dela). */
+  investmentsSyncedAt: timestamp('investments_synced_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -320,6 +323,8 @@ export const bankAccounts = pgTable(
     /** BANK (conta corrente) ou CREDIT (cartão): o sinal dos valores muda entre os dois. */
     type: text('type').notNull(),
     name: text('name').notNull(),
+    /** Conta corrente: saldo na última leitura (pode ser negativo). Cartão: o limite usado. */
+    balanceCents: bigint('balance_cents', { mode: 'number' }),
     /** Cartão: valor da fatura em aberto (a próxima a vencer), na última leitura. */
     billAmountCents: bigint('bill_amount_cents', { mode: 'number' }),
     /** Cartão: vencimento da fatura em aberto. */
@@ -350,6 +355,105 @@ export const openFinanceIgnored = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.externalId] })],
+)
+
+/**
+ * Investimentos de cada conexão, como a Pluggy mostrou na última leitura. A
+ * Pluggy só dá a foto de hoje; a evolução fica em `wealth_snapshots`.
+ * Ver lib/investments.ts.
+ */
+export const investments = pgTable(
+  'investments',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => bankConnections.id, { onDelete: 'cascade' }),
+    /** ID do investimento na Pluggy. */
+    externalId: text('external_id').notNull().unique(),
+    /** FIXED_INCOME, ETF, EQUITY... (tipo da Pluggy). */
+    type: text('type').notNull(),
+    subtype: text('subtype'),
+    name: text('name').notNull(),
+    /** Código na bolsa (IVVB11), quando houver. */
+    code: text('code'),
+    issuer: text('issuer'),
+    /** ACTIVE, PENDING ou TOTAL_WITHDRAWAL. */
+    status: text('status').notNull(),
+    /**
+     * O `status` da última vez que as movimentações foram lidas; null se
+     * nunca foram. Diferente de `status` = há movimentação por ler (ver
+     * `planMovementFetches`). Não dá para usar o próprio `status`: a posição
+     * é gravada toda vez, mesmo quando a leitura das movimentações fica para
+     * a execução seguinte.
+     */
+    movementsStatus: text('movements_status'),
+    /** Valor líquido: o que cai na conta num resgate hoje, já sem IR e IOF. */
+    balanceCents: bigint('balance_cents', { mode: 'number' }).notNull(),
+    /** Valor bruto, antes dos impostos. */
+    grossCents: bigint('gross_cents', { mode: 'number' }).notNull(),
+    /** Custo de compra do que segue aplicado; null quando o histórico não explica a posição. */
+    costCents: bigint('cost_cents', { mode: 'number' }),
+    /** Cotas (bolsa) ou unidades do título. Só para exibir, nunca para somar dinheiro. */
+    quantity: doublePrecision('quantity'),
+    /** Percentual do indexador (120 = 120% do CDI). */
+    rate: doublePrecision('rate'),
+    rateType: text('rate_type'),
+    fixedAnnualRate: doublePrecision('fixed_annual_rate'),
+    dueOn: date('due_on'),
+    purchaseOn: date('purchase_on'),
+    /** Dia da cotação que a Pluggy usou. */
+    positionOn: date('position_on'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('investments_user_idx').on(t.userId)],
+)
+
+/** Aportes, resgates e proventos de cada investimento. Alimentam o "guardado no mês". */
+export const investmentMovements = pgTable(
+  'investment_movements',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    investmentId: uuid('investment_id')
+      .notNull()
+      .references(() => investments.id, { onDelete: 'cascade' }),
+    externalId: text('external_id').notNull().unique(),
+    /** BUY, SELL, INTEREST... (tipo da Pluggy). */
+    type: text('type').notNull(),
+    occurredOn: date('occurred_on').notNull(),
+    /** Valor bruto da operação. */
+    amountCents: bigint('amount_cents', { mode: 'number' }).notNull(),
+    /** O que de fato saiu ou voltou para a conta, depois de IR, IOF e taxas. */
+    netAmountCents: bigint('net_amount_cents', { mode: 'number' }),
+  },
+  (t) => [index('investment_movements_user_date_idx').on(t.userId, t.occurredOn)],
+)
+
+/**
+ * Uma foto por dia do patrimônio, gravada na leitura dos investimentos. É o
+ * único jeito de ter a evolução: a Pluggy não guarda valores passados.
+ */
+export const wealthSnapshots = pgTable(
+  'wealth_snapshots',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    day: date('day').notNull(),
+    investmentsCents: bigint('investments_cents', { mode: 'number' }).notNull(),
+    /** Soma dos saldos das contas correntes. */
+    accountsCents: bigint('accounts_cents', { mode: 'number' }).notNull(),
+    /** Soma das faturas em aberto dos cartões. */
+    cardBillCents: bigint('card_bill_cents', { mode: 'number' }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.day] })],
 )
 
 export type User = typeof user.$inferSelect

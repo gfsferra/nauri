@@ -154,6 +154,31 @@ uma conexão não responde, a rodada não importa nada (sem os bancos de todas,
 um repasse entre contas contaria duas vezes). No
 `wrangler dev --test-scheduled`, o cron dispara em `GET /__scheduled`.
 
+**Investimentos** (aba "Investir", só para a mesma conta):
+- A mesma conexão traz as posições (`/investments`) e as movimentações de cada
+  uma (`/investments/{id}/transactions`, 12 meses). Regras puras e testes em
+  `lib/investments.ts`; leitura em `lib/investments-sync.ts`.
+- **Quando:** uma vez por atualização da Pluggy, numa execução do cron em que
+  a conexão não teve transação para ler (na prática, a hora seguinte à da
+  leitura das transações). Juntas, as duas leituras passariam do limite de
+  CPU e das 50 chamadas externas do plano gratuito. O botão "Sincronizar
+  agora" lê na hora.
+- **Corte:** no máximo 20 leituras de movimentações por execução. Primeiro as
+  posições novas ou que mudaram de estado (`movements_status` ≠ `status`),
+  depois as ativas. O que sobrar fica para a execução seguinte, e a conexão
+  só é marcada como lida (`investments_synced_at`) quando nada sobra.
+- **Valores:** o principal é o líquido (`balance`, já sem IR e IOF), com o
+  bruto ao lado. O custo vem de `amountOriginal` (CDB) ou do preço médio das
+  movimentações (ETF, ação). Sem histórico que explique a posição inteira, o
+  custo fica desconhecido e a posição sai do rendimento.
+- **Guardado no mês:** aportes (BUY) menos resgates (SELL, pelo líquido que
+  voltou para a conta). Proventos não entram.
+- **Evolução:** a Pluggy só dá o valor de hoje, então cada leitura grava uma
+  foto do dia em `wealth_snapshots` (investimentos, saldo das contas
+  correntes e faturas em aberto). O gráfico começa no dia do deploy.
+- **Patrimônio total:** saldo das contas correntes + investimentos − faturas
+  em aberto.
+
 O acesso autorizado ao banco vence em 12 meses. A partir de 30 dias antes do
 vencimento, o Perfil avisa para renovar no Meu Pluggy.
 
