@@ -178,6 +178,12 @@ um repasse entre contas contaria duas vezes). No
   correntes e faturas em aberto). O gráfico começa no dia do deploy.
 - **Patrimônio total:** saldo das contas correntes + investimentos − faturas
   em aberto.
+- **Reserva e taxa de poupança** (`savingsSummary`): cruzam os investimentos
+  com os lançamentos dos últimos 3 meses fechados, pela mesma data de
+  orçamento da Início. A reserva é o total investido dividido pela média de
+  saídas, contando só meses com gasto. A taxa é o guardado dividido pelas
+  entradas, somando os meses antes de dividir. O gráfico do guardado mostra
+  também a taxa do mês escolhido.
 
 O acesso autorizado ao banco vence em 12 meses. A partir de 30 dias antes do
 vencimento, o Perfil avisa para renovar no Meu Pluggy.

@@ -374,3 +374,67 @@ export function portfolioSummary(rows: readonly PositionRow[]) {
     closedCount: rows.length - active.length,
   }
 }
+
+/* ─────────────────────── poupança e reserva ──────────────────────── */
+
+/** Meses fechados usados na taxa de poupança e na média de gastos. */
+export const SAVINGS_WINDOW_MONTHS = 3
+
+export interface MonthTotals {
+  month: string
+  incomeCents: number
+  expenseCents: number
+}
+
+/** Fração guardada do que entrou; null sem entrada (não há o que dividir). */
+export function savingsRate(savedCents: number, incomeCents: number): number | null {
+  return incomeCents > 0 ? savedCents / incomeCents : null
+}
+
+/**
+ * O que a aba mostra junto dos investimentos, cruzando com os lançamentos:
+ *
+ * - **Taxa de poupança:** quanto do que entrou foi guardado, somando os
+ *   últimos meses fechados. Soma antes de dividir: a média das taxas daria
+ *   o mesmo peso a um mês de salário e a um mês sem entrada.
+ * - **Reserva em meses:** quantos meses dos gastos médios os investimentos
+ *   cobrem. Só contam meses fechados com algum gasto: o mês corrente está
+ *   pela metade, e um mês sem lançamento é falta de histórico, não um mês
+ *   sem gastos.
+ */
+export function savingsSummary(
+  flows: readonly MonthFlow[],
+  totals: readonly MonthTotals[],
+  investedCents: number,
+  currentMonth: string,
+  window = SAVINGS_WINDOW_MONTHS,
+) {
+  const totalsOf = new Map(totals.map((t) => [t.month, t]))
+  const closed = flows.filter((f) => f.month < currentMonth).slice(-window)
+
+  const saved = closed.reduce((s, f) => s + f.savedCents, 0)
+  const income = closed.reduce((s, f) => s + (totalsOf.get(f.month)?.incomeCents ?? 0), 0)
+
+  const withExpenses = closed
+    .map((f) => totalsOf.get(f.month)?.expenseCents ?? 0)
+    .filter((cents) => cents > 0)
+  const avgExpenseCents = withExpenses.length
+    ? Math.round(withExpenses.reduce((s, c) => s + c, 0) / withExpenses.length)
+    : null
+
+  return {
+    /** Primeiro e último mês da janela, para a legenda ("ago. a out."). */
+    fromMonth: closed[0]?.month ?? null,
+    toMonth: closed.at(-1)?.month ?? null,
+    savedCents: saved,
+    incomeCents: income,
+    rate: savingsRate(saved, income),
+    avgExpenseCents,
+    reserveMonths: avgExpenseCents ? investedCents / avgExpenseCents : null,
+    /** Taxa de cada mês do gráfico do guardado. */
+    monthly: flows.map((f) => {
+      const t = totalsOf.get(f.month)
+      return { month: f.month, incomeCents: t?.incomeCents ?? 0, rate: savingsRate(f.savedCents, t?.incomeCents ?? 0) }
+    }),
+  }
+}

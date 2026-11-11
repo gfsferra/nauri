@@ -34,6 +34,17 @@ function signed(cents: number): string {
   return `${cents >= 0 ? '+' : '−'} ${formatBRL(Math.abs(cents))}`
 }
 
+/** 'agosto de 2026' → 'agosto'. */
+function monthName(month: string): string {
+  return formatMonth(month).replace(/ de \d{4}$/, '')
+}
+
+/** 0,183 → '18%'; o sinal de menos tipográfico quando negativo. */
+function rateText(rate: number): string {
+  const p = Math.round(rate * 100)
+  return `${p < 0 ? '−' : ''}${Math.abs(p)}%`
+}
+
 function percentText(p: number): string {
   return `${p >= 0 ? '+' : '−'}${Math.abs(p).toFixed(1).replace('.', ',')}%`
 }
@@ -117,7 +128,8 @@ export default function Investments() {
 
 function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
   const theme = useTheme()
-  const { portfolio, netWorth, monthly, history } = data
+  const { portfolio, netWorth, monthly, history, savings } = data
+  const reserve = savings.reserveMonths
 
   return (
     <>
@@ -171,6 +183,44 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
         </Text>
       </Gutter>
 
+      {/* ── reserva e taxa de poupança: os investimentos contra os gastos ── */}
+      <Gutter style={{ flexDirection: 'row', gap: spacing.md }}>
+        <Card style={{ flex: 1, padding: spacing.lg, gap: 4 }}>
+          <Text style={{ ...type.caption, color: theme.text2 }}>Reserva</Text>
+          <Text style={[{ fontSize: 22, fontWeight: '700', letterSpacing: -0.5, color: theme.text }, tabular]}>
+            {reserve === null ? '—' : `${reserve.toFixed(1).replace('.', ',')} ${reserve < 2 ? 'mês' : 'meses'}`}
+          </Text>
+          <Text style={{ ...type.caption, color: theme.text2 }}>
+            {savings.avgExpenseCents === null ? (
+              'falta histórico de gastos'
+            ) : (
+              <>
+                dos seus gastos, de{' '}
+                <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{formatBRL(savings.avgExpenseCents)}</Text>{' '}
+                por mês
+              </>
+            )}
+          </Text>
+        </Card>
+        <Card style={{ flex: 1, padding: spacing.lg, gap: 4 }}>
+          <Text style={{ ...type.caption, color: theme.text2 }}>Taxa de poupança</Text>
+          <Text
+            style={[
+              { fontSize: 22, fontWeight: '700', letterSpacing: -0.5 },
+              tabular,
+              { color: savings.rate !== null && savings.rate > 0 ? theme.positive : theme.text },
+            ]}
+          >
+            {savings.rate === null ? '—' : rateText(savings.rate)}
+          </Text>
+          <Text style={{ ...type.caption, color: theme.text2 }}>
+            {savings.rate === null || !savings.fromMonth || !savings.toMonth
+              ? 'falta histórico de entradas'
+              : `do que entrou de ${monthName(savings.fromMonth)} a ${monthName(savings.toMonth)}`}
+          </Text>
+        </Card>
+      </Gutter>
+
       {/* ── evolução ── */}
       <Gutter>
         <Card>
@@ -181,7 +231,7 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
       {/* ── guardado no mês ── */}
       <Gutter>
         <Card>
-          <SavedChart monthly={monthly} hidden={hidden} />
+          <SavedChart monthly={monthly} rates={savings.monthly} hidden={hidden} />
         </Card>
       </Gutter>
 
@@ -477,12 +527,21 @@ function barPath(x: number, y: number, w: number, h: number, up: boolean): strin
  * investimentos, para baixo quando o resgate foi maior. O sinal está na
  * direção e no número do topo; a cor só reforça.
  */
-function SavedChart({ monthly, hidden }: { monthly: Ready['monthly']; hidden: boolean }) {
+function SavedChart({
+  monthly,
+  rates,
+  hidden,
+}: {
+  monthly: Ready['monthly']
+  rates: Ready['savings']['monthly']
+  hidden: boolean
+}) {
   const theme = useTheme()
   const [width, setWidth] = useState(0)
   const [picked, setPicked] = useState<number | null>(null)
   const index = picked ?? monthly.length - 1
   const selected = monthly[index]
+  const selectedRate = rates.find((r) => r.month === selected?.month)?.rate ?? null
 
   const maxUp = Math.max(0, ...monthly.map((m) => m.savedCents))
   const maxDown = Math.max(0, ...monthly.map((m) => -m.savedCents))
@@ -493,7 +552,7 @@ function SavedChart({ monthly, hidden }: { monthly: Ready['monthly']; hidden: bo
   return (
     <View>
       <Text style={{ ...type.section, color: theme.text }}>
-        Guardado em {selected ? formatMonth(selected.month).replace(/ de \d{4}$/, '') : ''}
+        Guardado em {selected ? monthName(selected.month) : ''}
       </Text>
       {selected ? (
         <>
@@ -512,6 +571,7 @@ function SavedChart({ monthly, hidden }: { monthly: Ready['monthly']; hidden: bo
             <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{formatBRL(selected.contributionsCents)}</Text> ·
             resgates{' '}
             <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{formatBRL(selected.withdrawalsCents)}</Text>
+            {selectedRate !== null ? ` · ${rateText(selectedRate)} do que entrou` : ''}
           </Text>
         </>
       ) : null}
