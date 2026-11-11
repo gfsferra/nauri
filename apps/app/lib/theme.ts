@@ -56,6 +56,13 @@ const light = {
   positiveSoft: 'rgba(16,185,129,0.12)',
   navBg: 'rgba(255,255,255,0.92)',
   /**
+   * Barra de abas flutuante, de vidro: fundo translúcido com desfoque do que
+   * passa por baixo (backdrop-filter), borda fina e sombra larga e suave.
+   */
+  glassBg: 'rgba(255,255,255,0.68)',
+  glassBorder: 'rgba(15,23,42,0.08)',
+  glassShadow: '0 10px 30px rgba(15,23,42,0.14), 0 1px 2px rgba(15,23,42,0.06)',
+  /**
    * Aresta de cima dos cartões. No claro é a mesma borda; no escuro, mais
    * clara que as laterais, como luz vinda de cima: é o que dá corpo à
    * superfície onde a sombra não aparece.
@@ -107,6 +114,9 @@ const dark: typeof light = {
   // Opaco: por trás da barra fica o fundo branco padrão da navegação, e
   // qualquer transparência a acinzentava.
   navBg: '#0F1116',
+  glassBg: 'rgba(28,32,41,0.62)',
+  glassBorder: 'rgba(255,255,255,0.10)',
+  glassShadow: '0 12px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)',
   avatarFills: ['#1C2029', '#1E232C', '#1A1E26', '#1C2029'],
   avatarText: '#C9D1DC',
   chartRamp: ['#6366F1', '#5B6474', '#3F4653', '#2A303A'],

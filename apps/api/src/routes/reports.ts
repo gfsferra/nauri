@@ -58,6 +58,20 @@ export const reportsRoute = new Hono<AppContext>()
       ...(await recurringExpenseForecast(db, userId, month)),
       ...(await installmentForecast(db, userId, month)),
     ].sort((a, b) => a.occurredOn.localeCompare(b.occurredOn))
+    // Cor e ícone da categoria de cada previsão, para a lista mostrar igual
+    // aos lançamentos de verdade.
+    const look = new Map(
+      (
+        await db
+          .select({ name: categories.name, kind: categories.kind, color: categories.color, icon: categories.icon })
+          .from(categories)
+          .where(eq(categories.userId, userId))
+      ).map((c) => [`${c.kind}:${c.name.toLowerCase()}`, c]),
+    )
+    const forecastWithLook = forecast.map((f) => {
+      const c = look.get(`${f.kind}:${f.categoryName.toLowerCase()}`)
+      return { ...f, categoryColor: c?.color ?? null, categoryIcon: c?.icon ?? null }
+    })
     const sumOf = (kind: 'income' | 'expense') =>
       forecast.filter((f) => f.kind === kind).reduce((sum, f) => sum + f.amountCents, 0)
     return c.json({
@@ -68,7 +82,7 @@ export const reportsRoute = new Hono<AppContext>()
       balanceCents: incomeCents - expenseCents,
       forecastIncomeCents: sumOf('income'),
       forecastExpenseCents: sumOf('expense'),
-      forecast,
+      forecast: forecastWithLook,
     })
   })
 

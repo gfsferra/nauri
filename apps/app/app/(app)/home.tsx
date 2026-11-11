@@ -18,6 +18,8 @@ import {
   SectionLabel,
   TrustNote,
   privacyBlur,
+  useTabBarSpace,
+  CategoryIcon,
 } from '@/components/ui'
 import { useSession } from '@/lib/auth-client'
 import { client, unwrap } from '@/lib/api'
@@ -43,6 +45,7 @@ type Row = {
   description: string
   categoryName: string
   categoryColor: string
+  categoryIcon?: string | null
   recurrenceId: string | null
   /** Compra do cartão que ainda não fechou na fatura (veio do Open Finance). */
   isPending?: boolean
@@ -52,6 +55,7 @@ type Row = {
 
 export default function Home() {
   const theme = useTheme()
+  const tabBarSpace = useTabBarSpace()
   const router = useRouter()
   const queryClient = useQueryClient()
   const { data: session } = useSession()
@@ -114,7 +118,8 @@ export default function Home() {
       amountCents: f.amountCents,
       description: f.description,
       categoryName: f.categoryName,
-      categoryColor: '',
+      categoryColor: f.categoryColor ?? '',
+      categoryIcon: f.categoryIcon,
       recurrenceId: null,
       isForecast: true,
     }))
@@ -157,7 +162,7 @@ export default function Home() {
           summary.refetch()
           before.refetch()
         }}
-        contentContainerStyle={{ paddingBottom: spacing.xxl }}
+        contentContainerStyle={{ paddingBottom: tabBarSpace }}
         ListHeaderComponent={
           <View style={{ gap: spacing.xl, paddingBottom: spacing.lg }}>
             {/* ── cabeçalho: saudação, inicial e o olho de privacidade ── */}
@@ -465,10 +470,7 @@ export default function Home() {
                 paddingVertical: 4,
               }}
             >
-              <Avatar
-                name={item.description || item.categoryName}
-                tone={toneOf(item.categoryName)}
-              />
+              <CategoryIcon icon={item.categoryIcon} color={item.categoryColor} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={{ ...type.row, color: theme.text }} numberOfLines={1}>
                   {item.description || item.categoryName}

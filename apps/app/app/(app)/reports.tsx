@@ -12,6 +12,7 @@ import {
   SectionLabel,
   Skeleton,
   Title,
+  useTabBarSpace,
 } from '@/components/ui'
 import { client, unwrap } from '@/lib/api'
 import {
@@ -35,6 +36,7 @@ const GAP = 2
 
 export default function Reports() {
   const theme = useTheme()
+  const tabBarSpace = useTabBarSpace()
   const [month, setMonth] = useState(currentMonth())
   const { from, to } = monthBounds(month)
   const previous = addMonths(month, -1)
@@ -90,7 +92,7 @@ export default function Reports() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl, gap: spacing.xl }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: tabBarSpace, gap: spacing.xl }}>
         <Gutter style={{ gap: spacing.lg }}>
           <Title>Relatórios</Title>
 
