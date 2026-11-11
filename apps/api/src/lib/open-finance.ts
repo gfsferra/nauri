@@ -139,6 +139,9 @@ const INCOME_MAP: Record<string, string> = {
 export function categoryFor(kind: 'expense' | 'income', pluggyCategory: string | null): string {
   const name = pluggyCategory ?? ''
   if (kind === 'expense') return EXPENSE_MAP[name] ?? 'Outros'
+  // Dinheiro do titular vindo de uma conta não conectada: na prática, o
+  // salário que cai em outro banco e é repassado.
+  if (name.startsWith('Same person transfer')) return 'Salário'
   return INCOME_MAP[name] ?? 'Outras receitas'
 }
 
@@ -173,9 +176,19 @@ function skipReason(tx: PluggyTransaction, accountType: PluggyAccountType): Skip
   ) {
     return 'bill_payment'
   }
-  if (category.startsWith('Same person transfer')) return 'own_transfer'
+  // Entre contas do próprio titular, só a saída é descartada. A entrada vem de
+  // uma conta que não está conectada (o salário que cai em outro banco e é
+  // repassado, por exemplo) e, para o Nauri, é dinheiro novo. Quando houver
+  // mais de uma conexão, a entrada vinda de conta conectada também precisa
+  // sair daqui, senão conta duas vezes.
+  if (category.startsWith('Same person transfer') && isOutflow(tx, accountType)) return 'own_transfer'
   if (INVESTMENT_CATEGORIES.has(category)) return 'investment'
   return null
+}
+
+/** Na conta, saída vem negativa. No cartão é o contrário: a compra vem positiva e o estorno negativo. */
+function isOutflow(tx: PluggyTransaction, accountType: PluggyAccountType): boolean {
+  return accountType === 'CREDIT' ? tx.amount > 0 : tx.amount < 0
 }
 
 export function mapPluggyTransaction(
@@ -192,10 +205,7 @@ export function mapPluggyTransaction(
   const occurredOn = occurredOnOf(tx.date)
   if (occurredOn > today) return { ok: false, reason: 'future' }
 
-  // Na conta, saída vem negativa. No cartão é o contrário: a compra vem
-  // positiva e o estorno (ou um crédito qualquer) negativo.
-  const outflow = accountType === 'CREDIT' ? tx.amount > 0 : tx.amount < 0
-  const kind = outflow ? 'expense' : 'income'
+  const kind = isOutflow(tx, accountType) ? 'expense' : 'income'
 
   return {
     ok: true,

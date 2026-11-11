@@ -106,15 +106,27 @@ describe('mapPluggyTransaction: conta corrente', () => {
     expect(r.ok).toBe(true)
   })
 
-  it('ignora transferências entre contas do próprio titular', () => {
+  it('ignora a saída para outra conta do próprio titular', () => {
     const r = mapPluggyTransaction(
-      tx({ amount: 100, type: 'CREDIT', category: 'Same person transfer', operationType: 'PIX' }),
+      tx({ amount: -100, type: 'DEBIT', category: 'Same person transfer', operationType: 'PIX' }),
       'BANK',
       TODAY,
     )
     expect(r).toEqual({ ok: false, reason: 'own_transfer' })
-    const sub = mapPluggyTransaction(tx({ amount: 100, category: 'Same person transfer - TED' }), 'BANK', TODAY)
+    const sub = mapPluggyTransaction(tx({ amount: -100, category: 'Same person transfer - TED' }), 'BANK', TODAY)
     expect(sub).toEqual({ ok: false, reason: 'own_transfer' })
+  })
+
+  it('entrada vinda de outra conta do titular (não conectada) vira receita em Salário', () => {
+    // O salário cai em outro banco e é repassado por Pix.
+    for (const category of ['Same person transfer', 'Same person transfer - PIX']) {
+      const r = mapPluggyTransaction(
+        tx({ amount: 3000.5, type: 'CREDIT', category, operationType: 'PIX' }),
+        'BANK',
+        TODAY,
+      )
+      expect(r.ok && r.value).toMatchObject({ kind: 'income', amountCents: 300050, categoryName: 'Salário' })
+    }
   })
 
   it('ignora aplicação e resgate automáticos', () => {
