@@ -13,6 +13,7 @@ import {
   text,
   timestamp,
   unique,
+  primaryKey,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
@@ -196,6 +197,13 @@ export const transactions = pgTable(
     recurrenceId: uuid('recurrence_id').references(() => recurrences.id, {
       onDelete: 'set null',
     }),
+    /** ID da transação na Pluggy, quando veio do Open Finance. */
+    externalId: text('external_id'),
+    bankAccountId: uuid('bank_account_id').references(() => bankAccounts.id, {
+      onDelete: 'set null',
+    }),
+    /** Compra do cartão que ainda não fechou na fatura (Open Finance). */
+    isPending: boolean('is_pending').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -211,6 +219,10 @@ export const transactions = pgTable(
     // abrindo o mesmo mês não conseguem lançar o salário duas vezes.
     // NULLs são distintos no Postgres, então lançamentos manuais não colidem.
     uniqueIndex('transactions_recurrence_occurrence_uq').on(t.recurrenceId, t.occurredOn),
+    // Idempotência do Open Finance: a mesma transação do banco nunca entra
+    // duas vezes, nem com duas sincronizações rodando ao mesmo tempo. NULLs são
+    // distintos, então lançamentos manuais não colidem.
+    uniqueIndex('transactions_user_external_uq').on(t.userId, t.externalId),
     index('transactions_user_date_idx').on(t.userId, t.occurredOn.desc()),
     index('transactions_user_category_idx').on(t.userId, t.categoryId),
     check('transactions_amount_positive', sql`${t.amountCents} > 0`),
@@ -237,6 +249,70 @@ export const budgets = pgTable(
     check('budgets_limit_positive', sql`${t.limitCents} > 0`),
     check('budgets_month_is_first_day', sql`date_part('day', ${t.month}) = 1`),
   ],
+)
+
+/* ────────────────────────── Open Finance ─────────────────────────── */
+/*
+ * Via Meu Pluggy, o plano gratuito de uso pessoal da Pluggy: só o titular da
+ * conexão (a conta do dono, `OPEN_FINANCE_USER_ID`) recebe dados do banco.
+ * Ver lib/open-finance-sync.ts.
+ */
+
+export const bankConnections = pgTable('bank_connections', {
+  id: uuid('id').primaryKey().default(sql`uuidv7()`),
+  userId: text('user_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  /** ID da conexão (item) na Pluggy. */
+  itemId: text('item_id').notNull().unique(),
+  /** Status da conexão na Pluggy (UPDATED, LOGIN_ERROR, OUTDATED...). */
+  status: text('status').notNull().default('PENDING'),
+  consentExpiresAt: timestamp('consent_expires_at', { withTimezone: true }),
+  /** `lastUpdatedAt` da Pluggy na última leitura recente: diz se há dado novo. */
+  providerUpdatedAt: timestamp('provider_updated_at', { withTimezone: true }),
+  lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+  /** Data mais antiga a importar. */
+  syncFrom: date('sync_from').notNull(),
+  /** Data mais antiga já importada; igual a `sync_from` quando o histórico terminou. */
+  backfillCursor: date('backfill_cursor').notNull(),
+  lastError: text('last_error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const bankAccounts = pgTable(
+  'bank_accounts',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => bankConnections.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    /** ID da conta na Pluggy. */
+    externalId: text('external_id').notNull().unique(),
+    /** BANK (conta corrente) ou CREDIT (cartão): o sinal dos valores muda entre os dois. */
+    type: text('type').notNull(),
+    name: text('name').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('bank_accounts_user_idx').on(t.userId)],
+)
+
+/**
+ * Transações do Open Finance que o usuário apagou. Sem isto, a próxima
+ * sincronização traria de volta o que ele tirou de propósito.
+ */
+export const openFinanceIgnored = pgTable(
+  'open_finance_ignored',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    externalId: text('external_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.externalId] })],
 )
 
 export type User = typeof user.$inferSelect

@@ -8,7 +8,7 @@ import { and, desc, eq, gte, lte, sql, type SQL } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { Db } from '../db/client.js'
-import { categories, transactions } from '../db/schema.js'
+import { categories, openFinanceIgnored, transactions } from '../db/schema.js'
 import type { AppContext } from '../env.js'
 import { materializeRecurrences } from '../lib/materialize.js'
 import { requireAuth } from '../middleware.js'
@@ -84,6 +84,8 @@ export const transactionsRoute = new Hono<AppContext>()
         categoryName: categories.name,
         categoryColor: categories.color,
         recurrenceId: transactions.recurrenceId,
+        isPending: transactions.isPending,
+        fromBank: sql<boolean>`${transactions.externalId} IS NOT NULL`,
       })
       .from(transactions)
       .innerJoin(categories, eq(categories.id, transactions.categoryId))
@@ -158,10 +160,21 @@ export const transactionsRoute = new Hono<AppContext>()
 
   .delete('/:id', zValidator('param', idParam), async (c) => {
     const { id } = c.req.valid('param')
-    const [row] = await c
-      .get('db')
+    const userId = c.get('userId')
+    const db = c.get('db')
+    const [row] = await db
       .delete(transactions)
-      .where(and(eq(transactions.id, id), eq(transactions.userId, c.get('userId'))))
-      .returning({ id: transactions.id })
-    return row ? c.json({ ok: true }) : c.json({ error: 'Lançamento não encontrado' }, 404)
+      .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
+      .returning({ id: transactions.id, externalId: transactions.externalId })
+    if (!row) return c.json({ error: 'Lançamento não encontrado' }, 404)
+
+    // Veio do banco (Open Finance): lembra que foi apagado de propósito, senão
+    // a próxima sincronização o traria de volta.
+    if (row.externalId) {
+      await db
+        .insert(openFinanceIgnored)
+        .values({ userId, externalId: row.externalId })
+        .onConflictDoNothing()
+    }
+    return c.json({ ok: true })
   })

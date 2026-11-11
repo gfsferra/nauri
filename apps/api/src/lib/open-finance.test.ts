@@ -1,0 +1,262 @@
+import {
+  amountToCents,
+  categoryFor,
+  mapPluggyTransaction,
+  occurredOnOf,
+  planSync,
+  type PluggyTransaction,
+} from './open-finance.js'
+
+const TODAY = '2026-11-10'
+
+function tx(over: Partial<PluggyTransaction>): PluggyTransaction {
+  return {
+    id: 'tx-1',
+    description: 'Compra',
+    amount: 10,
+    date: '2026-11-05T15:00:00.000Z',
+    category: 'Shopping',
+    status: 'POSTED',
+    type: 'DEBIT',
+    operationType: null,
+    ...over,
+  }
+}
+
+describe('amountToCents', () => {
+  it('converte reais em centavos sem erro de ponto flutuante', () => {
+    expect(amountToCents(55.49)).toBe(5549)
+    expect(amountToCents(0.1 + 0.2)).toBe(30) // 0.30000000000000004
+    expect(amountToCents(247.99)).toBe(24799)
+    expect(amountToCents(200)).toBe(20000)
+    expect(amountToCents(1.5)).toBe(150)
+  })
+
+  it('ignora o sinal: o tipo do lançamento vem de outra regra', () => {
+    expect(amountToCents(-76)).toBe(7600)
+    expect(amountToCents(-30.05)).toBe(3005)
+  })
+})
+
+describe('occurredOnOf', () => {
+  it('usa a data de São Paulo, não a de UTC', () => {
+    // 01:30 UTC do dia 10 = 22:30 do dia 9 em Brasília.
+    expect(occurredOnOf('2026-11-10T01:30:00.000Z')).toBe('2026-11-09')
+    expect(occurredOnOf('2026-11-10T03:00:00.000Z')).toBe('2026-11-10')
+  })
+
+  it('não erra a virada do ano', () => {
+    expect(occurredOnOf('2027-01-01T02:59:59.000Z')).toBe('2026-12-31')
+  })
+})
+
+describe('mapPluggyTransaction: conta corrente', () => {
+  it('saída negativa vira gasto', () => {
+    const r = mapPluggyTransaction(
+      tx({ amount: -30, type: 'DEBIT', category: 'Groceries' }),
+      'BANK',
+      TODAY,
+    )
+    expect(r).toEqual({
+      ok: true,
+      value: {
+        externalId: 'tx-1',
+        kind: 'expense',
+        occurredOn: '2026-11-05',
+        amountCents: 3000,
+        description: 'Compra',
+        categoryName: 'Mercado',
+        isPending: false,
+      },
+    })
+  })
+
+  it('entrada positiva vira receita', () => {
+    const r = mapPluggyTransaction(
+      tx({ amount: 7500, type: 'CREDIT', category: 'Salary', description: 'Salário' }),
+      'BANK',
+      TODAY,
+    )
+    expect(r.ok && r.value).toMatchObject({ kind: 'income', amountCents: 750000, categoryName: 'Salário' })
+  })
+
+  it('PIX genérico entra, em Outros ou Outras receitas', () => {
+    const out = mapPluggyTransaction(tx({ amount: -50, category: 'Transfers', operationType: 'PIX' }), 'BANK', TODAY)
+    const inn = mapPluggyTransaction(
+      tx({ amount: 50, type: 'CREDIT', category: 'Transfers', operationType: 'PIX' }),
+      'BANK',
+      TODAY,
+    )
+    expect(out.ok && out.value.categoryName).toBe('Outros')
+    expect(inn.ok && inn.value.categoryName).toBe('Outras receitas')
+  })
+
+  it('ignora o pagamento da fatura, que chega como transferência genérica', () => {
+    const r = mapPluggyTransaction(
+      tx({ amount: -1234.5, category: 'Transfers', operationType: 'OUTROS', description: 'Pagamento de fatura' }),
+      'BANK',
+      TODAY,
+    )
+    expect(r).toEqual({ ok: false, reason: 'bill_payment' })
+  })
+
+  it('não confunde "fatura" dentro de outra palavra com pagamento de fatura', () => {
+    const r = mapPluggyTransaction(tx({ amount: -10, description: 'Faturamento loja' }), 'BANK', TODAY)
+    expect(r.ok).toBe(true)
+  })
+
+  it('ignora transferências entre contas do próprio titular', () => {
+    const r = mapPluggyTransaction(
+      tx({ amount: 100, type: 'CREDIT', category: 'Same person transfer', operationType: 'PIX' }),
+      'BANK',
+      TODAY,
+    )
+    expect(r).toEqual({ ok: false, reason: 'own_transfer' })
+    const sub = mapPluggyTransaction(tx({ amount: 100, category: 'Same person transfer - TED' }), 'BANK', TODAY)
+    expect(sub).toEqual({ ok: false, reason: 'own_transfer' })
+  })
+
+  it('ignora aplicação e resgate automáticos', () => {
+    for (const amount of [-200, 200]) {
+      const r = mapPluggyTransaction(
+        tx({ amount, category: 'Investments', operationType: 'RESGATE_APLIC_FINANCEIRA' }),
+        'BANK',
+        TODAY,
+      )
+      expect(r).toEqual({ ok: false, reason: 'investment' })
+    }
+  })
+
+  it('rendimento não é movimento de investimento: entra como receita', () => {
+    const r = mapPluggyTransaction(
+      tx({ amount: 12.34, type: 'CREDIT', category: 'Proceeds interests and dividends' }),
+      'BANK',
+      TODAY,
+    )
+    expect(r.ok && r.value).toMatchObject({ kind: 'income', categoryName: 'Rendimentos' })
+  })
+
+  it('compra que usou saldo resgatado continua sendo compra', () => {
+    // A Pluggy marca algumas compras com operationType de resgate; quem decide é a categoria.
+    const r = mapPluggyTransaction(
+      tx({ amount: -80, category: 'Shopping', operationType: 'RESGATE_APLIC_FINANCEIRA' }),
+      'BANK',
+      TODAY,
+    )
+    expect(r.ok && r.value.kind).toBe('expense')
+  })
+})
+
+describe('mapPluggyTransaction: cartão de crédito', () => {
+  it('compra vem positiva e vira gasto', () => {
+    const r = mapPluggyTransaction(
+      tx({ amount: 247.99, type: 'DEBIT', category: 'Eating out', operationType: 'PAGAMENTO' }),
+      'CREDIT',
+      TODAY,
+    )
+    expect(r.ok && r.value).toMatchObject({ kind: 'expense', amountCents: 24799, categoryName: 'Alimentação fora' })
+  })
+
+  it('estorno vem negativo e vira receita', () => {
+    const r = mapPluggyTransaction(
+      tx({ amount: -15, type: 'CREDIT', category: 'Tax on financial operations', operationType: 'ESTORNO' }),
+      'CREDIT',
+      TODAY,
+    )
+    expect(r.ok && r.value).toMatchObject({ kind: 'income', amountCents: 1500, categoryName: 'Outras receitas' })
+  })
+
+  it('ignora o pagamento da fatura do lado do cartão', () => {
+    const r = mapPluggyTransaction(
+      tx({ amount: -1234.5, type: 'CREDIT', category: 'Credit card payment', operationType: 'PAGAMENTO_FATURA' }),
+      'CREDIT',
+      TODAY,
+    )
+    expect(r).toEqual({ ok: false, reason: 'bill_payment' })
+  })
+
+  it('parcela futura fica de fora até a data chegar', () => {
+    const r = mapPluggyTransaction(tx({ date: '2027-01-10T03:00:00.000Z' }), 'CREDIT', TODAY)
+    expect(r).toEqual({ ok: false, reason: 'future' })
+    const hoje = mapPluggyTransaction(tx({ date: '2026-11-10T03:00:00.000Z' }), 'CREDIT', TODAY)
+    expect(hoje.ok).toBe(true)
+  })
+
+  it('compra pendente entra marcada como pendente', () => {
+    const r = mapPluggyTransaction(tx({ status: 'PENDING' }), 'CREDIT', TODAY)
+    expect(r.ok && r.value.isPending).toBe(true)
+  })
+
+  it('a palavra "fatura" na descrição de uma compra no cartão não a descarta', () => {
+    const r = mapPluggyTransaction(tx({ amount: 30, description: 'Loja Fatura Certa' }), 'CREDIT', TODAY)
+    expect(r.ok).toBe(true)
+  })
+})
+
+describe('mapPluggyTransaction: casos gerais', () => {
+  it('ignora valor zero', () => {
+    expect(mapPluggyTransaction(tx({ amount: 0 }), 'BANK', TODAY)).toEqual({ ok: false, reason: 'zero' })
+  })
+
+  it('corta descrições longas em 200 caracteres e remove espaços nas pontas', () => {
+    const r = mapPluggyTransaction(tx({ amount: -1, description: `  ${'x'.repeat(250)}  ` }), 'BANK', TODAY)
+    expect(r.ok && r.value.description).toHaveLength(200)
+  })
+
+  it('compras e serviços ganham categorias próprias em vez de "Outros"', () => {
+    expect(categoryFor('expense', 'Shopping')).toBe('Compras')
+    expect(categoryFor('expense', 'Clothing')).toBe('Compras')
+    expect(categoryFor('expense', 'Services')).toBe('Serviços')
+    expect(categoryFor('expense', 'Bank fees')).toBe('Outros')
+  })
+
+  it('categoria nula cai no padrão do tipo', () => {
+    expect(categoryFor('expense', null)).toBe('Outros')
+    expect(categoryFor('income', null)).toBe('Outras receitas')
+  })
+})
+
+describe('planSync', () => {
+  const base = { syncFrom: '2025-11-10', backfillCursor: '2026-10-06', providerUpdatedAt: '2026-11-10T00:55:07.612Z' }
+
+  it('primeira execução lê a janela recente', () => {
+    expect(planSync({ ...base, providerUpdatedAt: null }, '2026-11-10T00:55:07.612Z', TODAY)).toEqual({
+      kind: 'recent',
+      from: '2026-10-06',
+      to: TODAY,
+    })
+  })
+
+  it('lê de novo a janela recente quando a Pluggy atualizou', () => {
+    expect(planSync(base, '2026-11-11T00:55:00.000Z', TODAY).kind).toBe('recent')
+  })
+
+  it('sem atualização na Pluggy, importa a próxima fatia do histórico', () => {
+    expect(planSync(base, base.providerUpdatedAt, TODAY)).toEqual({
+      kind: 'backfill',
+      from: '2026-09-05',
+      to: '2026-10-05',
+    })
+  })
+
+  it('a última fatia não passa da data de corte', () => {
+    expect(planSync({ ...base, backfillCursor: '2025-11-20' }, base.providerUpdatedAt, TODAY)).toEqual({
+      kind: 'backfill',
+      from: '2025-11-10',
+      to: '2025-11-19',
+    })
+  })
+
+  it('com histórico completo e nada novo, não faz nada', () => {
+    expect(planSync({ ...base, backfillCursor: base.syncFrom }, base.providerUpdatedAt, TODAY)).toEqual({ kind: 'idle' })
+  })
+
+  it('pedido manual força a leitura recente', () => {
+    expect(planSync({ ...base, backfillCursor: base.syncFrom }, base.providerUpdatedAt, TODAY, true).kind).toBe('recent')
+  })
+
+  it('a janela recente não começa antes da data de corte', () => {
+    const r = planSync({ ...base, syncFrom: '2026-11-01', providerUpdatedAt: null }, null, TODAY)
+    expect(r).toEqual({ kind: 'recent', from: '2026-11-01', to: TODAY })
+  })
+})

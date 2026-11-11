@@ -5,7 +5,7 @@ import { LEGAL_CONTACT, LegalPage, type LegalSection } from '@/components/legal'
  * fornecedor novo, finalidade nova) deve ser avisada aos usuários antes de
  * valer — ver a seção "Mudanças nesta política".
  */
-const UPDATED_AT = '10 de novembro de 2026'
+const UPDATED_AT = '11 de novembro de 2026'
 
 const sections: LegalSection[] = [
   {
@@ -29,6 +29,7 @@ const sections: LegalSection[] = [
         ],
       },
       'Não coletamos dados bancários, de cartão ou senhas de bancos, e o Nauri não se conecta à sua conta bancária. Não pedimos CPF nem documentos.',
+      'A única exceção é a conta do próprio mantenedor do Nauri, que importa os lançamentos das contas dele por Open Finance, por meio da Pluggy (plano de uso pessoal). Essa integração não está disponível para os demais usuários e não envolve dados de mais ninguém.',
     ],
   },
   {
