@@ -43,6 +43,8 @@ type Row = {
   recurrenceId: string | null
   /** Compra do cartão que ainda não fechou na fatura (veio do Open Finance). */
   isPending?: boolean
+  /** Salário previsto que ainda não caiu: calculado, não é lançamento. */
+  isForecast?: boolean
 }
 
 export default function Home() {
@@ -93,7 +95,18 @@ export default function Home() {
   // O extrato do DS é agrupado por dia, com 'Hoje' e 'Ontem' à frente.
   const sections = useMemo(() => {
     const byDay = new Map<string, Row[]>()
-    for (const row of (list.data?.items ?? []) as Row[]) {
+    const forecastRows: Row[] = (summary.data?.forecast ?? []).map((f) => ({
+      id: `previsto:${f.occurredOn}`,
+      kind: 'income',
+      occurredOn: f.occurredOn,
+      amountCents: f.amountCents,
+      description: f.description,
+      categoryName: 'Salário',
+      categoryColor: '',
+      recurrenceId: null,
+      isForecast: true,
+    }))
+    for (const row of [...((list.data?.items ?? []) as Row[]), ...forecastRows]) {
       const bucket = byDay.get(row.occurredOn)
       if (bucket) bucket.push(row)
       else byDay.set(row.occurredOn, [row])
@@ -101,12 +114,15 @@ export default function Home() {
     return [...byDay.entries()]
       .sort((a, b) => b[0].localeCompare(a[0]))
       .map(([day, data]) => ({ title: relativeDay(day), data }))
-  }, [list.data])
+  }, [list.data, summary.data])
 
-  const balance = summary.data?.balanceCents ?? 0
+  // O saldo mostrado já conta o salário que ainda vai cair no mês, com aviso
+  // logo abaixo: sem isso, todo começo de mês parece negativo.
+  const forecastIncome = summary.data?.forecastIncomeCents ?? 0
+  const balance = (summary.data?.balanceCents ?? 0) + forecastIncome
   const delta =
     summary.data && before.data
-      ? percentDelta(summary.data.balanceCents, before.data.balanceCents)
+      ? percentDelta(balance, before.data.balanceCents + before.data.forecastIncomeCents)
       : null
 
   const quickActions = [
@@ -233,6 +249,13 @@ export default function Home() {
                 )}
                 <Text style={{ ...type.caption, color: theme.text2 }}>vs. {formatMonth(previous)}</Text>
               </View>
+              {forecastIncome > 0 ? (
+                <Text style={{ ...type.caption, color: theme.text2, marginTop: 8 }}>
+                  Inclui{' '}
+                  <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{formatBRL(forecastIncome)}</Text>{' '}
+                  de salário previsto
+                </Text>
+              ) : null}
             </Gutter>
 
             {/* ── ações rápidas: o carrossel de pílulas do DS ── */}
@@ -272,11 +295,17 @@ export default function Home() {
                           privacyBlur(hidden, inkCard.text),
                         ]}
                       >
-                        + {formatBRL(summary.data.incomeCents)}
+                        + {formatBRL(summary.data.incomeCents + forecastIncome)}
                       </Text>
                     ) : (
                       <Skeleton width="70%" height={16} />
                     )}
+                    {forecastIncome > 0 ? (
+                      <Text style={{ ...type.caption, color: inkCard.textSoft }}>
+                        <Text style={[tabular, privacyBlur(hidden, inkCard.textSoft)]}>{formatBRL(forecastIncome)}</Text>{' '}
+                        previsto
+                      </Text>
+                    ) : null}
                   </View>
                   <View style={{ flex: 1, gap: 4 }}>
                     <Text style={{ ...type.caption, color: inkCard.textSoft }}>Saídas</Text>
@@ -334,9 +363,10 @@ export default function Home() {
         }
         renderItem={({ item }) => (
           <Pressable
-            onLongPress={() => confirmRemove(item)}
-            accessibilityHint="Toque e segure para excluir"
-            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+            // A previsão não é lançamento: não há o que excluir.
+            onLongPress={item.isForecast ? undefined : () => confirmRemove(item)}
+            accessibilityHint={item.isForecast ? undefined : 'Toque e segure para excluir'}
+            style={({ pressed }) => ({ opacity: item.isForecast ? 0.55 : pressed ? 0.6 : 1 })}
           >
             <Gutter
               style={{
@@ -359,6 +389,7 @@ export default function Home() {
                   {item.categoryName}
                   {item.recurrenceId ? ' · recorrente' : ''}
                   {item.isPending ? ' · pendente' : ''}
+                  {item.isForecast ? ' · previsto' : ''}
                 </Text>
               </View>
               <Amount
