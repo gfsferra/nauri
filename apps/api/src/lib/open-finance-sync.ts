@@ -6,6 +6,7 @@ import type { Env } from '../env.js'
 import {
   HISTORY_DAYS,
   mapPluggyTransaction,
+  planManualSync,
   planSync,
   type MappedTransaction,
   type PluggyAccountType,
@@ -56,7 +57,7 @@ export interface SyncResult {
 export async function syncOpenFinance(
   db: Db,
   config: OpenFinanceConfig,
-  options: { force?: boolean; now?: Date; client?: PluggyClient } = {},
+  options: { manual?: boolean; now?: Date; client?: PluggyClient } = {},
 ): Promise<SyncResult> {
   const now = options.now ?? new Date()
   const today = todayInTimezone(now)
@@ -67,16 +68,14 @@ export async function syncOpenFinance(
     const client = options.client ?? (await createPluggyClient(config.clientId, config.clientSecret))
     const item = await client.item(config.itemId)
 
-    const plan = planSync(
-      {
-        syncFrom: connection.syncFrom,
-        backfillCursor: connection.backfillCursor,
-        providerUpdatedAt: connection.providerUpdatedAt?.toISOString() ?? null,
-      },
-      item.lastUpdatedAt,
-      today,
-      options.force,
-    )
+    const state = {
+      syncFrom: connection.syncFrom,
+      backfillCursor: connection.backfillCursor,
+      providerUpdatedAt: connection.providerUpdatedAt?.toISOString() ?? null,
+    }
+    const plan = options.manual
+      ? planManualSync(state, item.lastUpdatedAt, today)
+      : planSync(state, item.lastUpdatedAt, today)
 
     const result: SyncResult = { plan: plan.kind, inserted: 0, updated: 0, removedPending: 0, skipped: {} }
     const statusUpdate = {

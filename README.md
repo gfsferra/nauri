@@ -116,7 +116,13 @@ exige o plano pago da Pluggy.
 
   Nenhuma execução carrega o ano inteiro, o que estouraria o limite de CPU do
   plano gratuito do Workers.
-- "Sincronizar agora", no Perfil, força a leitura dos últimos 35 dias.
+- "Sincronizar agora", no Perfil, faz o que estiver pendente (dado novo ou
+  a próxima fatia do histórico) e, se não houver nada, relê os últimos 35
+  dias. Serve de reserva se o agendamento falhar.
+- Cron Triggers exigem que a conta Cloudflare tenha um subdomínio
+  `workers.dev` (erro 10063 no deploy, se não tiver). Ele é criado ao abrir
+  Workers & Pages no painel pela primeira vez. O Nauri não usa esse
+  endereço (`workers_dev: false`).
 
 **Regras da conversão** (`lib/open-finance.ts`, com testes):
 - **Datas:** convertidas de UTC para o horário de São Paulo.
