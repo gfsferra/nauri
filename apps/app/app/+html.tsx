@@ -10,6 +10,31 @@ import type { PropsWithChildren } from 'react'
  * financeiros não deve mostrar saldo de cache como se fosse atual, e o Chrome
  * não exige service worker para instalar.
  */
+const statusBarScript = `(function () {
+  var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var meta = document.createElement('meta');
+  meta.name = 'apple-mobile-web-app-status-bar-style';
+  meta.content = dark ? 'black-translucent' : 'default';
+  document.head.appendChild(meta);
+})();`
+
+/*
+ * - Fundo da página na cor do tema: no iPhone a tela "estica" ao rolar além
+ *   do topo, e sem isto aparece branco por trás do app (e da barra de status
+ *   translúcida).
+ * - O Safari do iOS dá zoom ao focar um campo com fonte menor que 16px (os do
+ *   DS são 14,5). A regra vale só no iOS (-webkit-touch-callout é exclusivo
+ *   dele), então o resto não muda, e o zoom de pinça continua funcionando,
+ *   ao contrário de travar o zoom no viewport.
+ */
+const iosCss = `
+html, body { background-color: #F8FAFC; }
+@media (prefers-color-scheme: dark) { html, body { background-color: #0F172A; } }
+@supports (-webkit-touch-callout: none) {
+  input, textarea, select { font-size: 16px !important; }
+}
+`
+
 export default function Root({ children }: PropsWithChildren) {
   return (
     <html lang="pt-BR">
@@ -34,7 +59,15 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-title" content="Nauri" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        {/* Barra de status do app instalado no iPhone. No escuro ela fica
+            transparente ("black-translucent"), com o fundo do app por trás e
+            o texto branco; o SafeAreaView afasta o conteúdo do relógio. No
+            claro fica "default" (branca, texto escuro), que já combina com o
+            fundo claro: a translúcida tem texto sempre branco e sumiria. O iOS
+            lê a meta quando o app abre, então trocar o tema do aparelho com o
+            app aberto só vale na próxima abertura. */}
+        <script dangerouslySetInnerHTML={{ __html: statusBarScript }} />
+        <style dangerouslySetInnerHTML={{ __html: iosCss }} />
 
         <ScrollViewStyleReset />
       </head>
