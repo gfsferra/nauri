@@ -10,6 +10,8 @@ import {
   planMovementFetches,
   portfolioSummary,
   rateLabel,
+  savingsRate,
+  savingsSummary,
   signedCents,
   type PluggyInvestment,
   type PluggyInvestmentTransaction,
@@ -299,5 +301,69 @@ describe('planMovementFetches', () => {
     expect(second.toFetch.filter((i) => i.status === 'TOTAL_WITHDRAWAL').map((i) => i.id).sort()).toEqual(
       remote.filter((i) => !fetched.has(i.id)).map((i) => i.id).sort(),
     )
+  })
+})
+
+describe('savingsSummary', () => {
+  const flows = monthlyFlows(
+    [
+      { type: 'BUY', occurredOn: '2026-08-05', amountCents: 100000, netAmountCents: 100000 },
+      { type: 'BUY', occurredOn: '2026-09-05', amountCents: 50000, netAmountCents: 50000 },
+      { type: 'SELL', occurredOn: '2026-10-08', amountCents: 20000, netAmountCents: 20000 },
+      // O mês corrente fica fora da taxa e da média.
+      { type: 'BUY', occurredOn: '2026-11-02', amountCents: 999900, netAmountCents: 999900 },
+    ],
+    '2026-11',
+    6,
+  )
+  const totals = [
+    { month: '2026-07', incomeCents: 900000, expenseCents: 400000 },
+    { month: '2026-08', incomeCents: 500000, expenseCents: 300000 },
+    { month: '2026-09', incomeCents: 500000, expenseCents: 350000 },
+    { month: '2026-10', incomeCents: 600000, expenseCents: 250000 },
+    { month: '2026-11', incomeCents: 100000, expenseCents: 50000 },
+  ]
+
+  it('taxa dos últimos 3 meses fechados: soma o guardado e as entradas antes de dividir', () => {
+    const s = savingsSummary(flows, totals, 1800000, '2026-11')
+    expect(s.fromMonth).toBe('2026-08')
+    expect(s.toMonth).toBe('2026-10')
+    expect(s.savedCents).toBe(100000 + 50000 - 20000)
+    expect(s.incomeCents).toBe(1600000)
+    expect(s.rate).toBeCloseTo(130000 / 1600000, 10)
+  })
+
+  it('reserva em meses sobre a média de gastos dos meses fechados', () => {
+    const s = savingsSummary(flows, totals, 1800000, '2026-11')
+    expect(s.avgExpenseCents).toBe(300000)
+    expect(s.reserveMonths).toBe(6)
+  })
+
+  it('mês sem lançamento é falta de histórico: não baixa a média', () => {
+    const s = savingsSummary(flows, totals.filter((t) => t.month !== '2026-09'), 1100000, '2026-11')
+    expect(s.avgExpenseCents).toBe(275000)
+    expect(s.reserveMonths).toBe(4)
+  })
+
+  it('sem gastos nem entradas não inventa número', () => {
+    const s = savingsSummary(flows, [], 1800000, '2026-11')
+    expect(s.rate).toBeNull()
+    expect(s.avgExpenseCents).toBeNull()
+    expect(s.reserveMonths).toBeNull()
+  })
+
+  it('taxa de cada mês, inclusive negativa e a do mês corrente', () => {
+    const s = savingsSummary(flows, totals, 0, '2026-11')
+    const byMonth = Object.fromEntries(s.monthly.map((m) => [m.month, m.rate]))
+    expect(byMonth['2026-10']).toBeCloseTo(-20000 / 600000, 10)
+    expect(byMonth['2026-11']).toBeCloseTo(999900 / 100000, 10)
+    // Sem entrada no mês: sem taxa.
+    expect(byMonth['2026-06']).toBeNull()
+  })
+
+  it('savingsRate', () => {
+    expect(savingsRate(1000, 4000)).toBe(0.25)
+    expect(savingsRate(-1000, 4000)).toBe(-0.25)
+    expect(savingsRate(1000, 0)).toBeNull()
   })
 })

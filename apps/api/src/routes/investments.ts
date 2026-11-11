@@ -1,9 +1,18 @@
-import { addDays, currentMonth, todayInTimezone } from '@nauri/contracts'
-import { and, asc, eq, gte, inArray } from 'drizzle-orm'
+import { addDays, addMonthsToMonth, currentMonth, monthBounds, todayInTimezone } from '@nauri/contracts'
+import { and, asc, eq, gte, inArray, lte, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
-import { bankAccounts, bankConnections, investmentMovements, investments, wealthSnapshots } from '../db/schema.js'
+import {
+  bankAccounts,
+  bankConnections,
+  budgetDate,
+  investmentMovements,
+  investments,
+  transactions,
+  wealthSnapshots,
+} from '../db/schema.js'
 import type { AppContext } from '../env.js'
-import { monthlyFlows, portfolioSummary } from '../lib/investments.js'
+import { toCents } from '../lib/cents.js'
+import { monthlyFlows, portfolioSummary, savingsSummary } from '../lib/investments.js'
 import { bankLabelOf } from '../lib/open-finance.js'
 import { openFinanceConfig } from '../lib/open-finance-sync.js'
 import { requireAuth } from '../middleware.js'
@@ -37,7 +46,9 @@ export const investmentsRoute = new Hono<AppContext>()
     const today = todayInTimezone()
     const month = currentMonth()
 
-    const [rows, movements, accounts, history] = await Promise.all([
+    const firstMonth = addMonthsToMonth(month, -(FLOW_MONTHS - 1))
+
+    const [rows, movements, accounts, history, totals] = await Promise.all([
       db
         .select()
         .from(investments)
@@ -72,6 +83,23 @@ export const investmentsRoute = new Hono<AppContext>()
         .from(wealthSnapshots)
         .where(and(eq(wealthSnapshots.userId, userId), gte(wealthSnapshots.day, addDays(today, -365))))
         .orderBy(asc(wealthSnapshots.day)),
+      // Entradas e saídas por mês, com a mesma data de orçamento da Início e
+      // dos relatórios (a compra no cartão conta no mês que paga a fatura).
+      db
+        .select({
+          month: sql<string>`to_char(${budgetDate}, 'YYYY-MM')`,
+          income: sql`coalesce(sum(${transactions.amountCents}) filter (where ${transactions.kind} = 'income'), 0)`,
+          expense: sql`coalesce(sum(${transactions.amountCents}) filter (where ${transactions.kind} = 'expense'), 0)`,
+        })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.userId, userId),
+            gte(budgetDate, monthBounds(firstMonth).from),
+            lte(budgetDate, monthBounds(month).to),
+          ),
+        )
+        .groupBy(sql`to_char(${budgetDate}, 'YYYY-MM')`),
     ])
 
     const portfolio = portfolioSummary(rows)
@@ -84,6 +112,12 @@ export const investmentsRoute = new Hono<AppContext>()
         ? new Date(Math.min(...synced.map((d) => d.getTime())))
         : null
     const monthly = monthlyFlows(movements, month, FLOW_MONTHS)
+    const savings = savingsSummary(
+      monthly,
+      totals.map((t) => ({ month: t.month, incomeCents: toCents(t.income), expenseCents: toCents(t.expense) })),
+      portfolio.totalCents,
+      month,
+    )
 
     const checking = accounts.filter((a) => a.type === 'BANK')
     const accountsCents = checking.reduce((s, a) => s + (a.balanceCents ?? 0), 0)
@@ -98,6 +132,7 @@ export const investmentsRoute = new Hono<AppContext>()
       portfolio,
       /** O mês corrente é o último da série. */
       monthly,
+      savings,
       netWorth: {
         totalCents: accountsCents + portfolio.totalCents - cardBillCents,
         accountsCents,
