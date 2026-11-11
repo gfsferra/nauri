@@ -43,7 +43,7 @@ type Row = {
   recurrenceId: string | null
   /** Compra do cartão que ainda não fechou na fatura (veio do Open Finance). */
   isPending?: boolean
-  /** Salário previsto que ainda não caiu: calculado, não é lançamento. */
+  /** Salário ou conta fixa prevista que ainda não aconteceu: calculado, não é lançamento. */
   isForecast?: boolean
 }
 
@@ -96,12 +96,12 @@ export default function Home() {
   const sections = useMemo(() => {
     const byDay = new Map<string, Row[]>()
     const forecastRows: Row[] = (summary.data?.forecast ?? []).map((f) => ({
-      id: `previsto:${f.occurredOn}`,
-      kind: 'income',
+      id: `previsto:${f.kind}:${f.occurredOn}:${f.description}`,
+      kind: f.kind,
       occurredOn: f.occurredOn,
       amountCents: f.amountCents,
       description: f.description,
-      categoryName: 'Salário',
+      categoryName: f.categoryName,
       categoryColor: '',
       recurrenceId: null,
       isForecast: true,
@@ -116,14 +116,15 @@ export default function Home() {
       .map(([day, data]) => ({ title: relativeDay(day), data }))
   }, [list.data, summary.data])
 
-  // O saldo mostrado já conta o salário que ainda vai cair no mês, com aviso
-  // logo abaixo: sem isso, todo começo de mês parece negativo.
+  // O saldo mostrado já conta o que ainda vai acontecer no mês (o salário a
+  // cair e as contas fixas a cobrar), com aviso logo abaixo: sem isso, todo
+  // começo de mês parece negativo e o fim parece melhor do que é.
   const forecastIncome = summary.data?.forecastIncomeCents ?? 0
-  const balance = (summary.data?.balanceCents ?? 0) + forecastIncome
-  const delta =
-    summary.data && before.data
-      ? percentDelta(balance, before.data.balanceCents + before.data.forecastIncomeCents)
-      : null
+  const forecastExpense = summary.data?.forecastExpenseCents ?? 0
+  const projected = (s: { balanceCents: number; forecastIncomeCents: number; forecastExpenseCents: number }) =>
+    s.balanceCents + s.forecastIncomeCents - s.forecastExpenseCents
+  const balance = summary.data ? projected(summary.data) : 0
+  const delta = summary.data && before.data ? percentDelta(balance, projected(before.data)) : null
 
   const quickActions = [
     { key: 'new', label: 'Novo', icon: 'add-outline', go: () => router.push('/new') },
@@ -249,11 +250,24 @@ export default function Home() {
                 )}
                 <Text style={{ ...type.caption, color: theme.text2 }}>vs. {formatMonth(previous)}</Text>
               </View>
-              {forecastIncome > 0 ? (
+              {forecastIncome > 0 || forecastExpense > 0 ? (
                 <Text style={{ ...type.caption, color: theme.text2, marginTop: 8 }}>
-                  Inclui{' '}
-                  <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{formatBRL(forecastIncome)}</Text>{' '}
-                  de salário previsto
+                  Inclui previsões:
+                  {forecastIncome > 0 ? (
+                    <>
+                      {' '}+{' '}
+                      <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{formatBRL(forecastIncome)}</Text> de
+                      salário
+                    </>
+                  ) : null}
+                  {forecastIncome > 0 && forecastExpense > 0 ? ' ·' : null}
+                  {forecastExpense > 0 ? (
+                    <>
+                      {' '}−{' '}
+                      <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{formatBRL(forecastExpense)}</Text> de
+                      contas fixas
+                    </>
+                  ) : null}
                 </Text>
               ) : null}
             </Gutter>
@@ -317,11 +331,17 @@ export default function Home() {
                           privacyBlur(hidden, inkCard.text),
                         ]}
                       >
-                        − {formatBRL(summary.data.expenseCents)}
+                        − {formatBRL(summary.data.expenseCents + forecastExpense)}
                       </Text>
                     ) : (
                       <Skeleton width="70%" height={16} delay={100} />
                     )}
+                    {forecastExpense > 0 ? (
+                      <Text style={{ ...type.caption, color: inkCard.textSoft }}>
+                        <Text style={[tabular, privacyBlur(hidden, inkCard.textSoft)]}>{formatBRL(forecastExpense)}</Text>{' '}
+                        previsto
+                      </Text>
+                    ) : null}
                   </View>
                 </View>
               </InkCard>

@@ -10,8 +10,16 @@ export const summarySchema = z.object({
   balanceCents: z.number().int(),
   /** Salário previsto que ainda não caiu no mês (zero em mês passado). */
   forecastIncomeCents: z.number().int(),
+  /** Contas fixas (assinaturas etc.) previstas que ainda não cobraram no mês. */
+  forecastExpenseCents: z.number().int(),
   forecast: z.array(
-    z.object({ occurredOn: isoDateSchema, amountCents: z.number().int(), description: z.string() }),
+    z.object({
+      occurredOn: isoDateSchema,
+      kind: kindSchema,
+      amountCents: z.number().int(),
+      description: z.string(),
+      categoryName: z.string(),
+    }),
   ),
 })
 
