@@ -206,13 +206,13 @@ export default function Home() {
                       paddingVertical: 5,
                       paddingHorizontal: 9,
                       borderRadius: radius.full,
-                      backgroundColor: delta >= 0 ? theme.accentSoft : theme.surface2,
+                      backgroundColor: delta >= 0 ? theme.positiveSoft : theme.surface2,
                     }}
                   >
                     <Ionicons
                       name={delta >= 0 ? 'trending-up' : 'trending-down'}
                       size={12}
-                      color={delta >= 0 ? theme.accentText : theme.text2}
+                      color={delta >= 0 ? theme.positive : theme.text2}
                     />
                     {/* O sinal acompanha a cor: a seta e o + / − dizem a direção
                         sozinhos, para quem não separa os dois tons. */}
@@ -221,7 +221,7 @@ export default function Home() {
                         ...type.caption,
                         ...tabular,
                         fontWeight: '600',
-                        color: delta >= 0 ? theme.accentText : theme.text2,
+                        color: delta >= 0 ? theme.positive : theme.text2,
                       }}
                     >
                       {delta >= 0 ? '+' : '−'}

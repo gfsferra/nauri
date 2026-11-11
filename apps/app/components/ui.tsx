@@ -12,21 +12,24 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg'
-import { inkCard, radius, spacing, tabular, type, useTheme } from '@/lib/theme'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg'
+import { radius, spacing, tabular, type, useTheme } from '@/lib/theme'
 
 /* ─────────────────────────── superfícies ─────────────────────────── */
 
 export function Screen({ children, scroll = false }: { children: ReactNode; scroll?: boolean }) {
   const theme = useTheme()
+  const { top } = useSafeAreaInsets()
   const Container = scroll ? ScrollView : View
   return (
-    // O inset de topo cobre a barra de status no aparelho, mas na web ele é 0 —
-    // e o artboard reserva 58px ali. Sem um respiro próprio o conteúdo encosta
-    // na borda no navegador; somado ao inset, ele só afasta do entalhe.
+    // O inset de topo cobre a barra de status no aparelho, mas no navegador
+    // ele é 0, e o artboard reserva 58px ali. Sem um respiro próprio, o
+    // conteúdo encosta na borda do navegador. Com barra de status por cima
+    // (app nativo, ou o PWA no iPhone com a barra translúcida), 12px colava
+    // o cabeçalho no relógio, então ali o respiro dobra.
     <SafeAreaView
-      style={{ flex: 1, backgroundColor: theme.bg, paddingTop: spacing.md }}
+      style={{ flex: 1, backgroundColor: theme.bg, paddingTop: top > 0 ? spacing.xl + spacing.sm : spacing.md }}
       edges={['top']}
     >
       <Container
@@ -55,6 +58,7 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
           borderRadius: radius.card,
           borderWidth: 1,
           borderColor: theme.border,
+          borderTopColor: theme.edgeTop,
           backgroundColor: theme.surface,
           padding: 18,
         },
@@ -67,11 +71,15 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
 }
 
 /**
- * O cartão de tinta escura do DS — a única superfície que não muda com o tema,
- * porque é a peça de marca. O degradê vem em SVG para não puxar dependência
- * nativa nova só por causa de um fundo.
+ * O cartão de tinta escura do DS, a peça de marca. É escuro nos dois modos;
+ * no escuro sobe um degrau acima do fundo, com aresta e um brilho esmeralda
+ * no canto (ver `ink` em lib/theme.ts). O degradê vem em SVG para não puxar
+ * dependência nativa nova só por causa de um fundo.
  */
+const GLOW = 260
+
 export function InkCard({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  const { ink } = useTheme()
   return (
     <View
       style={[
@@ -79,7 +87,10 @@ export function InkCard({ children, style }: { children: ReactNode; style?: Styl
           borderRadius: radius.card,
           padding: spacing.xl,
           overflow: 'hidden',
-          backgroundColor: inkCard.to,
+          backgroundColor: ink.to,
+          borderWidth: 1,
+          borderColor: ink.edge,
+          borderTopColor: ink.edgeTop,
         },
         style,
       ]}
@@ -87,13 +98,31 @@ export function InkCard({ children, style }: { children: ReactNode; style?: Styl
       <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
         <Defs>
           <LinearGradient id="ink" x1="0" y1="0" x2="0.72" y2="1">
-            <Stop offset="0" stopColor={inkCard.from} />
-            <Stop offset="0.62" stopColor={inkCard.to} />
-            <Stop offset="1" stopColor="#111C30" />
+            <Stop offset="0" stopColor={ink.from} />
+            <Stop offset="0.62" stopColor={ink.to} />
+            <Stop offset="1" stopColor={ink.end} />
           </LinearGradient>
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill="url(#ink)" />
       </Svg>
+      {/* O brilho é um círculo de tamanho fixo no canto. Um radial
+          proporcional ao cartão (largo e baixo) achatava numa faixa verde. */}
+      {ink.glow ? (
+        <Svg
+          pointerEvents="none"
+          width={GLOW}
+          height={GLOW}
+          style={{ position: 'absolute', top: -GLOW / 2, right: -GLOW / 3 }}
+        >
+          <Defs>
+            <RadialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+              <Stop offset="0" stopColor={ink.glow} />
+              <Stop offset="1" stopColor={ink.glow} stopOpacity={0} />
+            </RadialGradient>
+          </Defs>
+          <Rect x="0" y="0" width="100%" height="100%" fill="url(#glow)" />
+        </Svg>
+      ) : null}
       {children}
     </View>
   )
@@ -104,6 +133,7 @@ export function InkCard({ children, style }: { children: ReactNode; style?: Styl
  * o DS usa na inicial do cabeçalho — é o único elemento de marca do sistema.
  */
 export function BrandMark({ children, size = 46 }: { children: ReactNode; size?: number }) {
+  const { ink } = useTheme()
   return (
     <View
       style={{
@@ -112,7 +142,12 @@ export function BrandMark({ children, size = 46 }: { children: ReactNode; size?:
         borderRadius: radius.lg,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: inkCard.to,
+        // No escuro a tinta da marca era a mesma do fundo e o quadrado sumia,
+        // deixando só o ícone solto. Lá ele sobe um degrau e ganha aresta.
+        backgroundColor: ink.mark,
+        borderWidth: 1,
+        borderColor: ink.edge,
+        borderTopColor: ink.edgeTop,
       }}
     >
       {children}
@@ -166,7 +201,7 @@ export function Amount({
 }) {
   const theme = useTheme()
   const sign = direction === 'in' ? '+ ' : direction === 'out' ? '− ' : ''
-  const color = direction === 'in' ? theme.accentText : theme.text
+  const color = direction === 'in' ? theme.positive : theme.text
   return (
     <Text
       accessibilityLabel={hidden ? 'Valor oculto' : undefined}
@@ -283,10 +318,22 @@ export function Button({
   const theme = useTheme()
   const inactive = disabled || loading
 
-  const fill =
-    variant === 'primary' ? theme.accent : variant === 'danger' ? theme.danger : 'transparent'
-  const label_ =
-    variant === 'primary' || variant === 'danger'
+  // Desabilitado (não ocupado) num tema com estado neutro próprio: cinza com
+  // rótulo apagado, em vez do botão inteiro a 45% (ver `disabledButton`).
+  const neutral = disabled && !loading && (variant === 'primary' || variant === 'danger')
+    ? theme.disabledButton
+    : null
+
+  const fill = neutral
+    ? neutral.fill
+    : variant === 'primary'
+      ? theme.accent
+      : variant === 'danger'
+        ? theme.danger
+        : 'transparent'
+  const label_ = neutral
+    ? neutral.label
+    : variant === 'primary' || variant === 'danger'
       ? '#FFFFFF'
       : variant === 'ghost'
         ? theme.accentText
@@ -306,8 +353,8 @@ export function Button({
         {
           backgroundColor: fill,
           borderColor: border,
-          // 45% é o estado desabilitado do DS.
-          opacity: inactive ? 0.45 : pressed ? 0.88 : 1,
+          // 45% é o estado desabilitado do DS (salvo quando o tema tem o neutro).
+          opacity: neutral ? 1 : inactive ? 0.45 : pressed ? 0.88 : 1,
         },
       ]}
     >
@@ -454,6 +501,7 @@ export function ListGroup({ children }: { children: ReactNode }) {
       style={{
         borderWidth: 1,
         borderColor: theme.border,
+        borderTopColor: theme.edgeTop,
         borderRadius: 20,
         backgroundColor: theme.surface,
         overflow: 'hidden',

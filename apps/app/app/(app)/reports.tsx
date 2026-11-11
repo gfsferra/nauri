@@ -201,7 +201,7 @@ export default function Reports() {
                       style={{
                         ...type.section,
                         ...tabular,
-                        color: delta !== null && delta <= 0 ? theme.accentText : theme.text,
+                        color: delta !== null && delta <= 0 ? theme.positive : theme.text,
                       }}
                     >
                       {delta === null ? '—' : `${delta >= 0 ? '+' : '−'}${Math.abs(delta).toFixed(0)}%`}

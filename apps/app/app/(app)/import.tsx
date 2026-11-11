@@ -133,7 +133,7 @@ export default function Import() {
           <ErrorBanner message={error} />
 
         {done ? (
-          /* A confirmação do DS: disco em accentSoft com o traço em destaque,
+          /* A confirmação do DS: disco em positiveSoft com o traço em positivo,
              sem emoji e com o texto rente à esquerda. */
           <Card style={{ gap: spacing.md }}>
             <View
@@ -143,10 +143,10 @@ export default function Import() {
                 borderRadius: radius.full,
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: theme.accentSoft,
+                backgroundColor: theme.positiveSoft,
               }}
             >
-              <Ionicons name="checkmark" size={36} color={theme.accent} />
+              <Ionicons name="checkmark" size={36} color={theme.positive} />
             </View>
             <Text style={{ ...type.heading, color: theme.text }}>
               {done.inserted} lançamento{done.inserted === 1 ? '' : 's'} importado
