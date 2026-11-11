@@ -271,6 +271,7 @@ async function refreshCardBill(
       upcomingInstallments: upcomingInstallments(fetched, today, connectedBanks).map((m) => ({
         externalId: m.externalId,
         occurredOn: m.occurredOn,
+        budgetOn: m.budgetOn,
         amountCents: m.amountCents,
         description: m.description,
         categoryName: m.categoryName,
@@ -422,6 +423,7 @@ async function applyTransactions(
           bankAccountId: account.id,
           isPending: m.isPending,
           isInstallment: m.isInstallment,
+          budgetOn: m.budgetOn,
         })),
       )
       // Já existe: atualiza só o que o banco pode mudar. Categoria e descrição
@@ -434,12 +436,14 @@ async function applyTransactions(
           occurredOn: sql`excluded.occurred_on`,
           isPending: sql`excluded.is_pending`,
           isInstallment: sql`excluded.is_installment`,
+          budgetOn: sql`excluded.budget_on`,
           updatedAt: sql`now()`,
         },
         setWhere: sql`${transactions.amountCents} <> excluded.amount_cents
           OR ${transactions.occurredOn} <> excluded.occurred_on
           OR ${transactions.isPending} <> excluded.is_pending
-          OR ${transactions.isInstallment} <> excluded.is_installment`,
+          OR ${transactions.isInstallment} <> excluded.is_installment
+          OR ${transactions.budgetOn} IS DISTINCT FROM excluded.budget_on`,
       })
       // xmax = 0 só numa linha recém-inserida: separa inserção de atualização.
       .returning({ inserted: sql<boolean>`xmax = 0` })
