@@ -27,6 +27,8 @@ export interface PluggyAccount {
   id: string
   type: PluggyAccountType
   name: string
+  /** Só na conta corrente. `transferNumber` é "banco/agência/conta". */
+  bankData?: { transferNumber?: string | null } | null
 }
 
 type Fetch = typeof fetch

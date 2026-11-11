@@ -78,10 +78,11 @@ function OpenFinanceSection() {
   else note = 'Dados do banco atualizados uma vez por dia'
 
   const accountLabel = (type: string) => (type === 'CREDIT' ? 'Cartão de crédito' : 'Conta corrente')
+  const banks = connected ? new Set(data.accounts.map((a) => a.bank)).size : 0
 
   return (
     <Gutter style={{ gap: spacing.sm }}>
-      <SectionLabel>Banco conectado</SectionLabel>
+      <SectionLabel>{banks > 1 ? 'Bancos conectados' : 'Banco conectado'}</SectionLabel>
       <ListGroup>
         {connected
           ? data.accounts.map((account) => (
@@ -89,7 +90,7 @@ function OpenFinanceSection() {
                 key={`${account.type}:${account.name}`}
                 icon={tile(account.type === 'CREDIT' ? 'card-outline' : 'business-outline')}
                 label={accountLabel(account.type)}
-                detail="via Open Finance"
+                detail={account.bank}
               />
             ))
           : null}

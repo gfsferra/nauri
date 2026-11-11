@@ -130,7 +130,10 @@ exige o plano pago da Pluggy.
 - **Sinal:** invertido no cartão (lá a compra vem positiva).
 - **Ficam de fora:**
   - o pagamento da fatura, dos dois lados;
-  - as transferências entre contas do próprio titular;
+  - a saída para outra conta do próprio titular, e a entrada vinda de um
+    banco também conectado (o código do banco de origem vem no Pix/TED). A
+    entrada vinda de banco não conectado é dinheiro novo: vira receita, em
+    "Salário";
   - a aplicação e o resgate automáticos;
   - as parcelas futuras, que entram quando a data chega.
 - **Categorias:** as da Pluggy viram as do Nauri; "Compras" e "Serviços" são
@@ -144,7 +147,11 @@ exige o plano pago da Pluggy.
 
 **Variáveis** (todas como segredo: o repositório é público):
 `PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET`, `PLUGGY_ITEM_ID` e
-`OPEN_FINANCE_USER_ID`. Sem as quatro, o recurso fica desligado. No
+`OPEN_FINANCE_USER_ID`. Sem as quatro, o recurso fica desligado. No Meu
+Pluggy cada banco é uma conexão separada: `PLUGGY_ITEM_ID` aceita vários IDs
+separados por vírgula, e cada execução avança uma janela em cada conexão. Se
+uma conexão não responde, a rodada não importa nada (sem os bancos de todas,
+um repasse entre contas contaria duas vezes). No
 `wrangler dev --test-scheduled`, o cron dispara em `GET /__scheduled`.
 
 O acesso autorizado ao banco vence em 12 meses. A partir de 30 dias antes do
