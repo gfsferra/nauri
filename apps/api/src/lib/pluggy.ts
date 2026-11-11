@@ -29,6 +29,8 @@ export interface PluggyAccount {
   name: string
   /** Só na conta corrente. `transferNumber` é "banco/agência/conta". */
   bankData?: { transferNumber?: string | null } | null
+  /** Só no cartão. `balanceDueDate` é o vencimento da fatura mais recente. */
+  creditData?: { balanceDueDate?: string | null } | null
 }
 
 type Fetch = typeof fetch

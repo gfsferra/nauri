@@ -4,9 +4,9 @@ import {
   monthlyQuerySchema,
   summaryQuerySchema,
 } from '@nauri/contracts'
-import { and, desc, eq, gte, isNotNull, lte, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
-import { categories, transactions } from '../db/schema.js'
+import { bankAccounts, categories, transactions } from '../db/schema.js'
 import type { AppContext } from '../env.js'
 import { addDays, addMonthsToMonth, currentMonth, monthBounds, todayInTimezone } from '@nauri/contracts'
 import { toCents } from '../lib/cents.js'
@@ -56,6 +56,7 @@ export const reportsRoute = new Hono<AppContext>()
     const forecast = [
       ...(await salaryForecast(db, userId, month)),
       ...(await recurringExpenseForecast(db, userId, month)),
+      ...(await installmentForecast(db, userId, month)),
     ].sort((a, b) => a.occurredOn.localeCompare(b.occurredOn))
     const sumOf = (kind: 'income' | 'expense') =>
       forecast.filter((f) => f.kind === kind).reduce((sum, f) => sum + f.amountCents, 0)
@@ -209,6 +210,8 @@ async function recurringExpenseForecast(db: Db, userId: string, month: string) {
         eq(transactions.userId, userId),
         eq(transactions.kind, 'expense'),
         isNotNull(transactions.externalId),
+        // Parcela não é conta fixa: tem fim, e já entra pela previsão de parcelas.
+        eq(transactions.isInstallment, false),
         gte(transactions.occurredOn, since < from ? since : from),
         lte(transactions.occurredOn, to),
       ),
@@ -221,4 +224,47 @@ async function recurringExpenseForecast(db: Db, userId: string, month: string) {
     month,
     today,
   ).map((f) => ({ ...f, kind: 'expense' as const }))
+}
+
+/**
+ * Parcelas futuras do cartão que caem no mês, lidas na última sincronização
+ * (`bank_accounts.upcoming_installments`). A que já virou lançamento sai.
+ */
+async function installmentForecast(db: Db, userId: string, month: string) {
+  const today = todayInTimezone()
+  if (month < today.slice(0, 7)) return []
+  const accounts = await db
+    .select({ upcoming: bankAccounts.upcomingInstallments })
+    .from(bankAccounts)
+    .where(and(eq(bankAccounts.userId, userId), isNotNull(bankAccounts.upcomingInstallments)))
+  const due = accounts
+    .flatMap((a) => a.upcoming ?? [])
+    .filter((i) => i.occurredOn.startsWith(month) && i.occurredOn > today)
+  if (due.length === 0) return []
+
+  const imported = new Set(
+    (
+      await db
+        .select({ externalId: transactions.externalId })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.userId, userId),
+            inArray(
+              transactions.externalId,
+              due.map((i) => i.externalId),
+            ),
+          ),
+        )
+    ).map((r) => r.externalId),
+  )
+  return due
+    .filter((i) => !imported.has(i.externalId))
+    .map((i) => ({
+      occurredOn: i.occurredOn,
+      amountCents: i.amountCents,
+      description: i.description,
+      categoryName: i.categoryName,
+      kind: 'expense' as const,
+    }))
 }

@@ -8,6 +8,8 @@ import {
   bankLabelOf,
   HISTORY_DAYS,
   mapPluggyTransaction,
+  openCardBill,
+  upcomingInstallments,
   planManualSync,
   planSync,
   type MappedTransaction,
@@ -219,6 +221,11 @@ async function syncConnection(
       reconcileWindow: plan.kind === 'recent' ? { from: plan.from, to: plan.to } : null,
       result,
     })
+    // Fatura em aberto e parcelas futuras: relidas junto com o dado novo.
+    if (plan.kind === 'recent' && account.type === 'CREDIT') {
+      const remote = ctx.accounts.find((a) => a.id === account.externalId)
+      await refreshCardBill(db, client, account, remote, today, ctx.connectedBanks, ctx.now)
+    }
   }
 
   await db
@@ -236,6 +243,41 @@ async function syncConnection(
     .where(eq(bankConnections.id, connection.id))
 
   return result
+}
+
+/**
+ * Lê a fatura em aberto e as parcelas futuras do cartão (ver `openCardBill` e
+ * `upcomingInstallments`). Uma leitura a mais, de dois meses atrás até pouco
+ * mais de um ano à frente, que é até onde vão as parcelas.
+ */
+async function refreshCardBill(
+  db: Db,
+  client: PluggyClient,
+  account: AccountRow,
+  remote: PluggyAccount | undefined,
+  today: string,
+  connectedBanks: ReadonlySet<string>,
+  now: Date,
+) {
+  const fetched = await client.transactions(account.externalId, addDays(today, -62), addDays(today, 400))
+  const dueDate = remote?.creditData?.balanceDueDate
+  const dueDay = dueDate ? Number(dueDate.slice(8, 10)) || null : null
+  const bill = openCardBill(fetched, dueDay, today)
+  await db
+    .update(bankAccounts)
+    .set({
+      billAmountCents: bill?.amountCents ?? null,
+      billDueOn: bill?.dueOn ?? null,
+      upcomingInstallments: upcomingInstallments(fetched, today, connectedBanks).map((m) => ({
+        externalId: m.externalId,
+        occurredOn: m.occurredOn,
+        amountCents: m.amountCents,
+        description: m.description,
+        categoryName: m.categoryName,
+      })),
+      billUpdatedAt: now,
+    })
+    .where(eq(bankAccounts.id, account.id))
 }
 
 function errorMessage(error: unknown): string {
@@ -379,6 +421,7 @@ async function applyTransactions(
           externalId: m.externalId,
           bankAccountId: account.id,
           isPending: m.isPending,
+          isInstallment: m.isInstallment,
         })),
       )
       // Já existe: atualiza só o que o banco pode mudar. Categoria e descrição
@@ -390,11 +433,13 @@ async function applyTransactions(
           amountCents: sql`excluded.amount_cents`,
           occurredOn: sql`excluded.occurred_on`,
           isPending: sql`excluded.is_pending`,
+          isInstallment: sql`excluded.is_installment`,
           updatedAt: sql`now()`,
         },
         setWhere: sql`${transactions.amountCents} <> excluded.amount_cents
           OR ${transactions.occurredOn} <> excluded.occurred_on
-          OR ${transactions.isPending} <> excluded.is_pending`,
+          OR ${transactions.isPending} <> excluded.is_pending
+          OR ${transactions.isInstallment} <> excluded.is_installment`,
       })
       // xmax = 0 só numa linha recém-inserida: separa inserção de atualização.
       .returning({ inserted: sql<boolean>`xmax = 0` })
@@ -443,7 +488,14 @@ export async function openFinanceStatus(db: Db, config: OpenFinanceConfig) {
 
   const ids = connections.map((c) => c.id)
   const accounts = await db
-    .select({ connectionId: bankAccounts.connectionId, name: bankAccounts.name, type: bankAccounts.type })
+    .select({
+      connectionId: bankAccounts.connectionId,
+      name: bankAccounts.name,
+      type: bankAccounts.type,
+      billAmountCents: bankAccounts.billAmountCents,
+      billDueOn: bankAccounts.billDueOn,
+      billUpdatedAt: bankAccounts.billUpdatedAt,
+    })
     .from(bankAccounts)
     .where(inArray(bankAccounts.connectionId, ids))
 
@@ -480,6 +532,15 @@ export async function openFinanceStatus(db: Db, config: OpenFinanceConfig) {
     historyFrom: connections.map((c) => c.backfillCursor).sort().at(-1)!,
     lastError: connections.find((c) => c.lastError)?.lastError ?? null,
     accounts: accounts.map((a) => ({ name: a.name, type: a.type, bank: bankOf.get(a.connectionId) ?? bankLabelOf(a.name) })),
+    /** Fatura em aberto de cada cartão, para a tela inicial. */
+    cards: accounts
+      .filter((a) => a.type === 'CREDIT' && a.billDueOn !== null && a.billAmountCents !== null)
+      .map((a) => ({
+        bank: bankOf.get(a.connectionId) ?? bankLabelOf(a.name),
+        billAmountCents: a.billAmountCents!,
+        billDueOn: a.billDueOn!,
+        billUpdatedAt: iso(a.billUpdatedAt),
+      })),
     importedCount: counts?.total ?? 0,
   }
 }

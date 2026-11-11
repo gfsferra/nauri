@@ -5,6 +5,8 @@ import {
   categoryFor,
   mapPluggyTransaction,
   occurredOnOf,
+  openCardBill,
+  upcomingInstallments,
   planManualSync,
   planSync,
   type PluggyTransaction,
@@ -92,6 +94,7 @@ describe('mapPluggyTransaction: conta corrente', () => {
         description: 'Compra',
         categoryName: 'Mercado',
         isPending: false,
+        isInstallment: false,
       },
     })
   })
@@ -333,5 +336,52 @@ describe('planSync', () => {
   it('a janela recente não começa antes da data de corte', () => {
     const r = planSync({ ...base, syncFrom: '2026-11-01', providerUpdatedAt: null }, null, TODAY)
     expect(r).toEqual({ kind: 'recent', from: '2026-11-01', to: TODAY })
+  })
+})
+
+describe('parcelas e fatura do cartão', () => {
+  const parcela = (over: Partial<PluggyTransaction>, n: number, total: number, bill: string) =>
+    tx({
+      status: 'PENDING',
+      ...over,
+      creditCardMetadata: { installmentNumber: n, totalInstallments: total, billForecastDate: bill },
+    })
+
+  it('marca a parcela, mesmo sem "2/4" na descrição', () => {
+    const r = mapPluggyTransaction(parcela({ description: 'Loja de Eletrônicos' }, 3, 10, '2026-12'), 'CREDIT', TODAY)
+    expect(r.ok && r.value.isInstallment).toBe(true)
+    const avista = mapPluggyTransaction(tx({ creditCardMetadata: { totalInstallments: 1 } }), 'CREDIT', TODAY)
+    expect(avista.ok && avista.value.isInstallment).toBe(false)
+  })
+
+  it('a fatura em aberto é a próxima a vencer, com compras menos estornos', () => {
+    const txs = [
+      parcela({ id: 'a', amount: 248, date: '2026-10-31T03:00:00.000Z' }, 3, 10, '2026-12'),
+      tx({ id: 'b', amount: 40.97, status: 'PENDING', creditCardMetadata: { billForecastDate: '2026-12' } }),
+      tx({ id: 'c', amount: -10, status: 'PENDING', creditCardMetadata: { billForecastDate: '2026-12' } }),
+      // Fatura que já venceu (dia 9 de novembro) e parcela de uma fatura futura.
+      tx({ id: 'd', amount: 112.83, status: 'PENDING', creditCardMetadata: { billForecastDate: '2026-11' } }),
+      parcela({ id: 'e', amount: 247.99, date: '2027-01-13T03:00:00.000Z' }, 5, 10, '2027-02'),
+      // Lançamento já faturado não entra.
+      tx({ id: 'f', amount: 500, status: 'POSTED', creditCardMetadata: { billForecastDate: '2026-12' } }),
+    ]
+    expect(openCardBill(txs, 9, TODAY)).toEqual({ amountCents: 24800 + 4097 - 1000, dueOn: '2026-12-09' })
+  })
+
+  it('sem dia de vencimento ou sem lançamento em aberto, não há fatura', () => {
+    expect(openCardBill([], 9, TODAY)).toBeNull()
+    expect(openCardBill([tx({ status: 'PENDING', creditCardMetadata: { billForecastDate: '2026-12' } })], null, TODAY)).toBeNull()
+  })
+
+  it('parcelas futuras viram previsão; as de hoje para trás, não', () => {
+    const txs = [
+      parcela({ id: 'hoje', date: '2026-11-10T03:00:00.000Z' }, 2, 4, '2026-12'),
+      parcela({ id: 'dez', amount: 244.77, date: '2026-12-27T03:00:00.000Z', category: 'Travel' }, 3, 4, '2027-01'),
+      parcela({ id: 'jan', amount: 244.77, date: '2027-01-27T03:00:00.000Z', category: 'Travel' }, 4, 4, '2027-02'),
+    ]
+    expect(upcomingInstallments(txs, TODAY).map((m) => [m.externalId, m.occurredOn, m.categoryName, m.isInstallment])).toEqual([
+      ['dez', '2026-12-27', 'Lazer', true],
+      ['jan', '2027-01-27', 'Lazer', true],
+    ])
   })
 })

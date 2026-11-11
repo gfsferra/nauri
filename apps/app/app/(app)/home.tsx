@@ -13,6 +13,7 @@ import {
   ErrorBanner,
   Gutter,
   InkCard,
+  ListGroup,
   Screen,
   SectionLabel,
   TrustNote,
@@ -24,10 +25,12 @@ import {
   addMonths,
   currentMonth,
   formatBRL,
+  formatDate,
   formatMonth,
   monthBounds,
   percentDelta,
   relativeDay,
+  sinceLabel,
   toneOf,
 } from '@/lib/format'
 import { inkCard, radius, spacing, tabular, type, useTheme } from '@/lib/theme'
@@ -69,6 +72,15 @@ export default function Home() {
     queryKey: ['summary', previous],
     queryFn: async () => unwrap(await client.reports.summary.$get({ query: { month: previous } })),
   })
+
+  // Mesma chave da seção do Perfil: o cache é um só. Para quem não tem Open
+  // Finance a API responde `enabled: false` e o cartão da fatura não aparece.
+  const openFinance = useQuery({
+    queryKey: ['open-finance'],
+    queryFn: async () => unwrap(await client['open-finance'].$get()),
+    refetchInterval: 5 * 60_000,
+  })
+  const cards = openFinance.data?.enabled && openFinance.data.connected ? openFinance.data.cards : []
 
   const list = useQuery({
     queryKey: ['transactions', month],
@@ -346,6 +358,62 @@ export default function Home() {
                 </View>
               </InkCard>
             </Gutter>
+
+            {/* ── fatura em aberto do cartão (Open Finance) ── */}
+            {cards.length ? (
+              <Gutter>
+                <ListGroup>
+                  {cards.map((card, i) => (
+                    <View
+                      key={card.bank}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: spacing.md,
+                        minHeight: 64,
+                        paddingHorizontal: spacing.lg,
+                        paddingVertical: 10,
+                        borderBottomWidth: i === cards.length - 1 ? 0 : 1,
+                        borderBottomColor: theme.border,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 11,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: theme.accentSoft,
+                        }}
+                      >
+                        <Ionicons name="card-outline" size={17} color={theme.accentText} />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={{ ...type.row, color: theme.text }} numberOfLines={1}>
+                          Fatura atual · {card.bank}
+                        </Text>
+                        {/* A Pluggy atualiza uma vez por dia: o "atualizada há" explica a
+                            diferença para o app do banco, que mostra a compra de agora há pouco. */}
+                        <Text style={{ ...type.caption, color: theme.text2, marginTop: 2 }} numberOfLines={2}>
+                          Vence em {formatDate(card.billDueOn)}
+                          {card.billUpdatedAt ? ` · atualizada ${sinceLabel(card.billUpdatedAt)}` : ''}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          { ...type.row, fontWeight: '600', color: theme.text },
+                          tabular,
+                          privacyBlur(hidden, theme.text),
+                        ]}
+                      >
+                        {formatBRL(card.billAmountCents)}
+                      </Text>
+                    </View>
+                  ))}
+                </ListGroup>
+              </Gutter>
+            ) : null}
 
             <Gutter style={{ gap: spacing.md }}>
               <ErrorBanner message={list.error?.message ?? summary.error?.message} />

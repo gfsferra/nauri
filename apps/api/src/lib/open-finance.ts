@@ -1,4 +1,4 @@
-import { addDays, parseAmountToCents, todayInTimezone } from '@nauri/contracts'
+import { addDays, clampDayToMonth, makeIso, parseAmountToCents, todayInTimezone } from '@nauri/contracts'
 
 /**
  * Conversão de uma transação da Pluggy (Open Finance, via Meu Pluggy) num
@@ -25,6 +25,12 @@ export interface PluggyTransaction {
   operationType: string | null
   /** Dados do Pix/TED. `routingNumber` é o código do banco (COMPE), ex.: "341". */
   paymentData?: { payer?: { routingNumber?: string | null } | null } | null
+  /** Só no cartão. `billForecastDate` é o mês da fatura ("2026-12"). */
+  creditCardMetadata?: {
+    installmentNumber?: number | null
+    totalInstallments?: number | null
+    billForecastDate?: string | null
+  } | null
 }
 
 export interface MappedTransaction {
@@ -36,6 +42,7 @@ export interface MappedTransaction {
   /** Nome de uma categoria padrão do Nauri (ver `seed.ts`). */
   categoryName: string
   isPending: boolean
+  isInstallment: boolean
 }
 
 export type SkipReason =
@@ -247,6 +254,7 @@ export function mapPluggyTransaction(
       description: tx.description.trim().slice(0, 200),
       categoryName: categoryFor(kind, tx.category),
       isPending: tx.status === 'PENDING',
+      isInstallment: (tx.creditCardMetadata?.totalInstallments ?? 0) > 1,
     },
   }
 }
@@ -319,4 +327,61 @@ export function planManualSync(state: SyncState, providerUpdatedAt: string | nul
 
 function maxDate(a: string, b: string): string {
   return a > b ? a : b
+}
+
+export interface CardBill {
+  /** Compras menos estornos da fatura em aberto, em centavos. */
+  amountCents: number
+  dueOn: string
+}
+
+/**
+ * A fatura em aberto do cartão: a próxima a vencer. A Pluggy marca cada
+ * lançamento ainda não faturado com o mês da fatura (`billForecastDate`); o
+ * dia do vencimento vem da conta (`balanceDueDate`). Null sem esses dados.
+ *
+ * @param transactions lançamentos do cartão, incluindo as parcelas futuras.
+ * @param dueDay dia do vencimento da fatura.
+ */
+export function openCardBill(
+  transactions: PluggyTransaction[],
+  dueDay: number | null,
+  today: string,
+): CardBill | null {
+  if (!dueDay) return null
+  const dueOnOf = (month: string) => {
+    const [year, m] = month.split('-').map(Number) as [number, number]
+    return makeIso(year, m, clampDayToMonth(year, m, dueDay))
+  }
+
+  const byBill = new Map<string, number>()
+  for (const tx of transactions) {
+    const month = tx.creditCardMetadata?.billForecastDate?.slice(0, 7)
+    if (tx.status !== 'PENDING' || !month || !/^\d{4}-\d{2}$/.test(month)) continue
+    // Compra positiva, estorno negativo (ver `mapPluggyTransaction`).
+    const cents = amountToCents(tx.amount) * (tx.amount > 0 ? 1 : -1)
+    byBill.set(month, (byBill.get(month) ?? 0) + cents)
+  }
+
+  const open = [...byBill.keys()].sort().find((month) => dueOnOf(month) >= today)
+  return open ? { amountCents: byBill.get(open)!, dueOn: dueOnOf(open) } : null
+}
+
+/**
+ * Parcelas futuras do cartão: entram como lançamento quando a data chega
+ * (`mapPluggyTransaction` as recusa antes) e, até lá, viram previsão.
+ */
+export function upcomingInstallments(
+  transactions: PluggyTransaction[],
+  today: string,
+  connectedBanks: ReadonlySet<string> = new Set(),
+): MappedTransaction[] {
+  const out: MappedTransaction[] = []
+  for (const tx of transactions) {
+    if (occurredOnOf(tx.date) <= today) continue
+    // Mapeia como se a data já tivesse chegado, para aproveitar as mesmas regras.
+    const r = mapPluggyTransaction(tx, 'CREDIT', '9999-12-31', connectedBanks)
+    if (r.ok && r.value.kind === 'expense') out.push(r.value)
+  }
+  return out.sort((a, b) => a.occurredOn.localeCompare(b.occurredOn))
 }
