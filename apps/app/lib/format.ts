@@ -14,31 +14,6 @@ export function formatBRL(cents: number): string {
   return brl.format(cents / 100)
 }
 
-/** Sem o "R$", para quando o rótulo já diz que é dinheiro. */
-export function formatCents(cents: number): string {
-  return (cents / 100).toLocaleString('pt-BR', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
-
-/**
- * Entrada de valor estilo calculadora: cada tecla empurra um dígito pela
- * direita, então digitar 1-2-3 mostra R$ 1,23.
- *
- * É o padrão de app de banco e evita o problema real do teclado decimal no
- * iOS — onde a vírgula muda de lugar conforme o idioma do aparelho e o usuário
- * acaba lançando R$ 1.000,00 no lugar de R$ 10,00.
- */
-export function pushDigit(currentCents: number, digit: string): number {
-  const next = currentCents * 10 + Number(digit)
-  return next > 1_000_000_000_000 ? currentCents : next
-}
-
-export function popDigit(currentCents: number): number {
-  return Math.floor(currentCents / 10)
-}
-
 const MONTHS = [
   'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
   'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',

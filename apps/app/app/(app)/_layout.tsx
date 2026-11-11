@@ -99,13 +99,6 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="new"
-        options={{
-          title: 'Novo',
-          tabBarIcon: ({ color }) => <Ionicons name="add-circle-outline" color={color} size={22} />,
-        }}
-      />
-      <Tabs.Screen
         name="reports"
         options={{
           title: 'Relatórios',
@@ -115,7 +108,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="investments"
         options={{
-          // "Investimentos" não cabe numa das cinco abas a 390px; o título da tela é o nome completo.
+          // "Investimentos" sai cortado na barra a 390px; o título da tela é o nome completo.
           title: 'Investir',
           href: showInvestments ? undefined : null,
           tabBarIcon: ({ color }) => <Ionicons name="trending-up-outline" color={color} size={21} />,
