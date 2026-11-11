@@ -11,6 +11,7 @@ import type { AppContext } from '../env.js'
 import { addDays, addMonthsToMonth, currentMonth, monthBounds, todayInTimezone } from '@nauri/contracts'
 import { toCents } from '../lib/cents.js'
 import { materializeRecurrences } from '../lib/materialize.js'
+import { forecastExpensesForMonth, RECURRING_LOOKBACK_DAYS, recurringSeries } from '../lib/recurring-forecast.js'
 import { forecastForMonth, LOOKBACK_DAYS, salarySlots } from '../lib/salary-forecast.js'
 import type { Db } from '../db/client.js'
 import { requireAuth } from '../middleware.js'
@@ -50,14 +51,22 @@ export const reportsRoute = new Hono<AppContext>()
 
     const incomeCents = toCents(row?.income)
     const expenseCents = toCents(row?.expense)
-    const forecast = await salaryForecast(c.get('db'), c.get('userId'), month)
+    const db = c.get('db')
+    const userId = c.get('userId')
+    const forecast = [
+      ...(await salaryForecast(db, userId, month)),
+      ...(await recurringExpenseForecast(db, userId, month)),
+    ].sort((a, b) => a.occurredOn.localeCompare(b.occurredOn))
+    const sumOf = (kind: 'income' | 'expense') =>
+      forecast.filter((f) => f.kind === kind).reduce((sum, f) => sum + f.amountCents, 0)
     return c.json({
       month,
       incomeCents,
       expenseCents,
       /** Só o que já aconteceu. A tela soma a previsão à parte, com aviso. */
       balanceCents: incomeCents - expenseCents,
-      forecastIncomeCents: forecast.reduce((sum, f) => sum + f.amountCents, 0),
+      forecastIncomeCents: sumOf('income'),
+      forecastExpenseCents: sumOf('expense'),
       forecast,
     })
   })
@@ -168,5 +177,48 @@ async function salaryForecast(db: Db, userId: string, month: string) {
     payments.filter((p) => p.occurredOn >= from && p.occurredOn <= to),
     month,
     today,
-  ).map((f) => ({ ...f, description: 'Salário previsto' }))
+  ).map((f) => ({
+    ...f,
+    kind: 'income' as const,
+    description: 'Salário previsto',
+    categoryName: 'Salário',
+  }))
+}
+
+/**
+ * Contas fixas previstas do mês (ver `lib/recurring-forecast.ts`): assinaturas
+ * e outras cobranças mensais que vieram do banco.
+ */
+async function recurringExpenseForecast(db: Db, userId: string, month: string) {
+  const today = todayInTimezone()
+  if (month < today.slice(0, 7)) return []
+  const { from, to } = monthBounds(month)
+  const since = addDays(today, -RECURRING_LOOKBACK_DAYS)
+
+  const rows = await db
+    .select({
+      occurredOn: transactions.occurredOn,
+      amountCents: transactions.amountCents,
+      description: transactions.description,
+      categoryName: categories.name,
+    })
+    .from(transactions)
+    .innerJoin(categories, eq(categories.id, transactions.categoryId))
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        eq(transactions.kind, 'expense'),
+        isNotNull(transactions.externalId),
+        gte(transactions.occurredOn, since < from ? since : from),
+        lte(transactions.occurredOn, to),
+      ),
+    )
+  const payments = rows.map((r) => ({ ...r, amountCents: toCents(r.amountCents) }))
+
+  return forecastExpensesForMonth(
+    recurringSeries(payments, today),
+    payments.filter((p) => p.occurredOn >= from && p.occurredOn <= to),
+    month,
+    today,
+  ).map((f) => ({ ...f, kind: 'expense' as const }))
 }
