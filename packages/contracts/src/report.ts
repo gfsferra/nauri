@@ -6,7 +6,13 @@ export const summarySchema = z.object({
   month: monthSchema,
   incomeCents: z.number().int(),
   expenseCents: z.number().int(),
+  /** Só o que já aconteceu; a previsão vem à parte. */
   balanceCents: z.number().int(),
+  /** Salário previsto que ainda não caiu no mês (zero em mês passado). */
+  forecastIncomeCents: z.number().int(),
+  forecast: z.array(
+    z.object({ occurredOn: isoDateSchema, amountCents: z.number().int(), description: z.string() }),
+  ),
 })
 
 export const byCategoryRowSchema = z.object({

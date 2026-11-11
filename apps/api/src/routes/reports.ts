@@ -4,13 +4,15 @@ import {
   monthlyQuerySchema,
   summaryQuerySchema,
 } from '@nauri/contracts'
-import { and, desc, eq, gte, lte, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, isNotNull, lte, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { categories, transactions } from '../db/schema.js'
 import type { AppContext } from '../env.js'
-import { addMonthsToMonth, currentMonth, monthBounds } from '@nauri/contracts'
+import { addDays, addMonthsToMonth, currentMonth, monthBounds, todayInTimezone } from '@nauri/contracts'
 import { toCents } from '../lib/cents.js'
 import { materializeRecurrences } from '../lib/materialize.js'
+import { forecastForMonth, LOOKBACK_DAYS, salarySlots } from '../lib/salary-forecast.js'
+import type { Db } from '../db/client.js'
 import { requireAuth } from '../middleware.js'
 
 /**
@@ -48,11 +50,15 @@ export const reportsRoute = new Hono<AppContext>()
 
     const incomeCents = toCents(row?.income)
     const expenseCents = toCents(row?.expense)
+    const forecast = await salaryForecast(c.get('db'), c.get('userId'), month)
     return c.json({
       month,
       incomeCents,
       expenseCents,
+      /** Só o que já aconteceu. A tela soma a previsão à parte, com aviso. */
       balanceCents: incomeCents - expenseCents,
+      forecastIncomeCents: forecast.reduce((sum, f) => sum + f.amountCents, 0),
+      forecast,
     })
   })
 
@@ -129,3 +135,38 @@ export const reportsRoute = new Hono<AppContext>()
 
     return c.json(series)
   })
+
+/**
+ * Salário previsto do mês (ver `lib/salary-forecast.ts`). Só olha salários
+ * que vieram do banco (Open Finance): quem lança à mão já tem a recorrência.
+ */
+async function salaryForecast(db: Db, userId: string, month: string) {
+  const today = todayInTimezone()
+  if (month < today.slice(0, 7)) return []
+  const { from, to } = monthBounds(month)
+  const since = addDays(today, -LOOKBACK_DAYS)
+
+  const rows = await db
+    .select({ occurredOn: transactions.occurredOn, amountCents: transactions.amountCents })
+    .from(transactions)
+    .innerJoin(categories, eq(categories.id, transactions.categoryId))
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        eq(transactions.kind, 'income'),
+        isNotNull(transactions.externalId),
+        eq(categories.name, 'Salário'),
+        gte(transactions.occurredOn, since < from ? since : from),
+        lte(transactions.occurredOn, to),
+      ),
+    )
+  const payments = rows.map((r) => ({ occurredOn: r.occurredOn, amountCents: toCents(r.amountCents) }))
+
+  const slots = salarySlots(payments, today)
+  return forecastForMonth(
+    slots,
+    payments.filter((p) => p.occurredOn >= from && p.occurredOn <= to),
+    month,
+    today,
+  ).map((f) => ({ ...f, description: 'Salário previsto' }))
+}
