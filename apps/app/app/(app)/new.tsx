@@ -227,7 +227,15 @@ export default function NewTransaction() {
             }}
             loading={create.isPending}
             disabled={!canSave}
-            icon={<Ionicons name="checkmark" size={17} color="#FFFFFF" />}
+            // O ícone acompanha o rótulo: no estado desabilitado neutro do tema
+            // escuro, branco destoaria do texto apagado.
+            icon={
+              <Ionicons
+                name="checkmark"
+                size={17}
+                color={!canSave && theme.disabledButton ? theme.disabledButton.label : '#FFFFFF'}
+              />
+            }
           />
         </Gutter>
       </ScrollView>

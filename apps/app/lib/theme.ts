@@ -1,21 +1,41 @@
+import { useSyncExternalStore } from 'react'
 import { useColorScheme } from 'react-native'
 
 /**
  * Tokens do design system Órbita (artboard 1b do projeto de Design).
  *
- * A paleta inteira sai de lá: #F8FAFC / #0F172A de fundo e tinta, esmeralda
- * #10B981 como único destaque, e coral #EF4444 reservado exclusivamente a ação
- * destrutiva. Nada aqui é escolha nossa — mexer em um valor é mexer no DS.
+ * O modo claro sai de lá: #F8FAFC / #0F172A de fundo e tinta, e coral
+ * #EF4444 reservado exclusivamente a ação destrutiva. O destaque, que no
+ * artboard era o esmeralda, virou índigo, e o esmeralda ficou só com o
+ * sentido de valor positivo (ver o comentário antes de `light`).
+ *
+ * O modo escuro foi redesenhado (nov/2026): o slate-900 do artboard era um
+ * azul-marinho saturado, com superfícies do mesmo matiz que mal se separavam
+ * do fundo. Agora segue o padrão dos temas escuros de Linear, Vercel e Apple:
+ * base grafite quase preta, elevação por degraus pequenos de luminosidade
+ * (sombra não aparece no escuro), bordas translúcidas e texto branco suave.
+ * Os papéis não mudam: o esmeralda segue único destaque e o coral, só perigo.
  */
 
-/** Tinta neutra e coral valem nos dois modos: são papéis, não tons. */
+/** Coral vale nos dois modos: é papel, não tom. */
 const shared = {
   danger: '#EF4444',
-  accent: '#10B981',
 }
 
+/*
+ * Destaque e positivo são papéis separados (nov/2026). O esmeralda fazia os
+ * dois: era a cor de tudo que se toca (botão, link, aba ativa) e também a de
+ * dinheiro entrando, e o olho não distinguia "isto é um botão" de "isto é
+ * receita". Agora:
+ *   - accent (índigo): marca e interação, nunca valor;
+ *   - positive (esmeralda): só valor e sinal positivo (entrada, saldo que
+ *     melhorou, gasto que caiu, confirmação de sucesso);
+ *   - danger (coral): só ação destrutiva, como antes.
+ * Os índigos de preenchimento passam AA com rótulo branco nos dois modos.
+ */
 const light = {
   ...shared,
+  accent: '#4F46E5',
   bg: '#F8FAFC',
   surface: '#FFFFFF',
   surface2: '#EEF2F6',
@@ -25,51 +45,112 @@ const light = {
   text: '#0F172A',
   text2: '#64748B',
   text3: '#94A3B8',
-  accentSoft: 'rgba(16,185,129,0.12)',
+  accentSoft: 'rgba(79,70,229,0.10)',
+  /** Texto e ícone em destaque: um tom mais profundo, para contraste AA no fundo. */
+  accentText: '#4338CA',
   /**
-   * O esmeralda puro só bate 3:1 no fundo claro — serve a ícone e chrome, não a
-   * número. Todo texto em destaque usa este tom profundo (DS, decisão 06).
+   * O esmeralda puro só bate 3:1 no fundo claro, então todo número positivo
+   * usa este tom profundo (DS, decisão 06).
    */
-  accentText: '#047857',
+  positive: '#047857',
+  positiveSoft: 'rgba(16,185,129,0.12)',
   navBg: 'rgba(255,255,255,0.92)',
+  /**
+   * Aresta de cima dos cartões. No claro é a mesma borda; no escuro, mais
+   * clara que as laterais, como luz vinda de cima: é o que dá corpo à
+   * superfície onde a sombra não aparece.
+   */
+  edgeTop: '#E2E8F0',
   /** Fundos das iniciais na lista: rampa slate, nunca cor de categoria. */
   avatarFills: ['#E8EDF3', '#EEF2F6', '#EDF1F5', '#E8EDF3'],
   avatarText: '#475569',
   /** Rosca de gastos: destaque + rampa slate, sem legenda arco-íris (decisão 05). */
-  chartRamp: ['#10B981', '#94A3B8', '#CBD5E1', '#E2E8F0'],
+  chartRamp: ['#4F46E5', '#94A3B8', '#CBD5E1', '#E2E8F0'],
+  /**
+   * Botão desabilitado. `null` = o padrão do DS (o próprio botão a 45%). No
+   * escuro o verde a 45% vira um tom lamacento, então lá ele fica neutro.
+   */
+  disabledButton: null as { fill: string; label: string } | null,
+  /**
+   * A peça de marca (cartão-herói e quadrado do logo). No claro é a tinta
+   * escura do DS, que já contrasta com o fundo. No escuro, a mesma tinta
+   * sumiria no fundo: ela sobe um degrau, ganha aresta e um brilho esmeralda.
+   */
+  ink: {
+    from: '#1E293B',
+    to: '#0F172A',
+    end: '#111C30',
+    mark: '#0F172A',
+    edge: 'transparent',
+    edgeTop: 'transparent',
+    glow: null as string | null,
+  },
 }
 
 const dark: typeof light = {
   ...shared,
-  bg: '#0F172A',
-  surface: '#182238',
-  surface2: '#1E2A42',
-  track: '#22304A',
-  skeleton: '#22304A',
-  border: 'rgba(248,250,252,0.09)',
-  text: '#F8FAFC',
-  text2: '#94A3B8',
-  text3: '#64748B',
-  accentSoft: 'rgba(16,185,129,0.18)',
-  accentText: '#6EE7B7',
-  navBg: 'rgba(15,23,42,0.92)',
-  avatarFills: ['#22304A', '#243349', '#1E2A42', '#22304A'],
-  avatarText: '#CBD5E1',
-  chartRamp: ['#10B981', '#64748B', '#475569', '#334155'],
+  accent: '#5B5CEB',
+  bg: '#0B0D12',
+  surface: '#13161D',
+  surface2: '#1A1E26',
+  track: '#20252E',
+  skeleton: '#1A1E26',
+  border: 'rgba(255,255,255,0.07)',
+  edgeTop: 'rgba(255,255,255,0.12)',
+  text: '#F2F4F7',
+  text2: '#9BA3B1',
+  text3: '#646C7A',
+  accentSoft: 'rgba(99,102,241,0.16)',
+  accentText: '#8B93F8',
+  positive: '#34D399',
+  positiveSoft: 'rgba(16,185,129,0.14)',
+  // Opaco: por trás da barra fica o fundo branco padrão da navegação, e
+  // qualquer transparência a acinzentava.
+  navBg: '#0F1116',
+  avatarFills: ['#1C2029', '#1E232C', '#1A1E26', '#1C2029'],
+  avatarText: '#C9D1DC',
+  chartRamp: ['#6366F1', '#5B6474', '#3F4653', '#2A303A'],
+  disabledButton: { fill: '#1A1E26', label: '#646C7A' },
+  ink: {
+    from: '#1D222C',
+    to: '#13161D',
+    end: '#0F1217',
+    mark: '#1A1E26',
+    edge: 'rgba(255,255,255,0.08)',
+    edgeTop: 'rgba(255,255,255,0.16)',
+    glow: 'rgba(99,102,241,0.24)',
+  },
 }
 
-/** O cartão-herói é tinta escura nos dois modos — é a peça de marca. */
+/** Texto sobre a peça de marca: escura nos dois modos, então texto claro. */
 export const inkCard = {
-  from: '#1E293B',
-  to: '#0F172A',
   text: '#F8FAFC',
   textSoft: 'rgba(248,250,252,0.55)',
 }
 
 export type Theme = typeof light
 
+const noopSubscribe = () => () => {}
+
+/**
+ * Tema do aparelho.
+ *
+ * Na web cada página é pré-renderizada no build, sem saber o tema de quem vai
+ * abrir, e sai no claro. Na hidratação o React não corrige atributos que
+ * divergem do HTML estático, então uma página aberta direto no modo escuro
+ * ficava clara até algo forçar outra renderização. Aqui o tema só vira escuro
+ * depois da hidratação: o primeiro render bate com o HTML (claro) e o
+ * seguinte, logo em seguida, aplica o tema real. No app nativo não há HTML
+ * estático e o valor certo vale desde o primeiro render.
+ */
 export function useTheme(): Theme {
-  return useColorScheme() === 'dark' ? dark : light
+  const scheme = useColorScheme()
+  const hydrated = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  )
+  return hydrated && scheme === 'dark' ? dark : light
 }
 
 /** Medida horizontal do DS: 20px de margem, seções separadas por 20. */

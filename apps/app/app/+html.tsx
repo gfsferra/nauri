@@ -29,7 +29,7 @@ const statusBarScript = `(function () {
  */
 const iosCss = `
 html, body { background-color: #F8FAFC; }
-@media (prefers-color-scheme: dark) { html, body { background-color: #0F172A; } }
+@media (prefers-color-scheme: dark) { html, body { background-color: #0B0D12; } }
 @supports (-webkit-touch-callout: none) {
   input, textarea, select { font-size: 16px !important; }
 }
@@ -53,7 +53,7 @@ export default function Root({ children }: PropsWithChildren) {
 
         <link rel="manifest" href="/manifest.webmanifest" />
         <meta name="theme-color" content="#F8FAFC" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#0F172A" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content="#0B0D12" media="(prefers-color-scheme: dark)" />
 
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
