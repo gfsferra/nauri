@@ -4,6 +4,8 @@ import type { Db } from '../db/client.js'
 import { bankAccounts, bankConnections, categories, openFinanceIgnored, transactions } from '../db/schema.js'
 import type { Env } from '../env.js'
 import {
+  bankCodeOf,
+  bankLabelOf,
   HISTORY_DAYS,
   mapPluggyTransaction,
   planManualSync,
@@ -13,38 +15,45 @@ import {
   type PluggyTransaction,
   type SkipReason,
 } from './open-finance.js'
-import { createPluggyClient, type PluggyClient } from './pluggy.js'
+import { createPluggyClient, type PluggyAccount, type PluggyClient, type PluggyItem } from './pluggy.js'
 
 /**
  * Sincronização do Open Finance (Meu Pluggy → Nauri).
  *
- * Roda de hora em hora (Cron Trigger) e pelo botão "Sincronizar agora". Cada
- * execução processa UMA janela de datas (ver `planSync`): a leitura recente
- * quando a Pluggy tem dado novo, ou uma fatia de um mês do histórico. Assim
- * nenhuma execução carrega 12 meses de uma vez, o que estouraria os 10 ms de
- * CPU do plano gratuito do Workers.
+ * Roda de hora em hora (Cron Trigger) e pelo botão "Sincronizar agora". No
+ * Meu Pluggy cada banco é uma conexão (item) separada; cada execução processa
+ * UMA janela de datas por conexão (ver `planSync`): a leitura recente quando
+ * a Pluggy tem dado novo, ou uma fatia de um mês do histórico. Assim nenhuma
+ * execução carrega 12 meses de uma vez, o que estouraria os 10 ms de CPU do
+ * plano gratuito do Workers.
  */
 
 export interface OpenFinanceConfig {
   clientId: string
   clientSecret: string
-  itemId: string
+  /** Uma conexão por banco. `PLUGGY_ITEM_ID` aceita vários IDs separados por vírgula. */
+  itemIds: string[]
   userId: string
 }
 
 /** O recurso só existe com as quatro variáveis configuradas. */
 export function openFinanceConfig(env: Env): OpenFinanceConfig | null {
   const { PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET, PLUGGY_ITEM_ID, OPEN_FINANCE_USER_ID } = env
-  if (!PLUGGY_CLIENT_ID || !PLUGGY_CLIENT_SECRET || !PLUGGY_ITEM_ID || !OPEN_FINANCE_USER_ID) return null
+  const itemIds = (PLUGGY_ITEM_ID ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean)
+  if (!PLUGGY_CLIENT_ID || !PLUGGY_CLIENT_SECRET || itemIds.length === 0 || !OPEN_FINANCE_USER_ID) return null
   return {
     clientId: PLUGGY_CLIENT_ID,
     clientSecret: PLUGGY_CLIENT_SECRET,
-    itemId: PLUGGY_ITEM_ID,
+    itemIds,
     userId: OPEN_FINANCE_USER_ID,
   }
 }
 
-export interface SyncResult {
+export interface ConnectionSyncResult {
+  itemId: string
   plan: 'idle' | 'recent' | 'backfill'
   from?: string
   to?: string
@@ -52,7 +61,15 @@ export interface SyncResult {
   updated: number
   removedPending: number
   skipped: Partial<Record<SkipReason | 'ignored', number>>
+  /** Falha só desta conexão; as outras seguem. */
+  error?: string
 }
+
+export interface SyncResult {
+  connections: ConnectionSyncResult[]
+}
+
+type Connection = typeof bankConnections.$inferSelect
 
 export async function syncOpenFinance(
   db: Db,
@@ -62,93 +79,188 @@ export async function syncOpenFinance(
   const now = options.now ?? new Date()
   const today = todayInTimezone(now)
 
-  const connection = await ensureConnection(db, config, today)
+  const connections: Connection[] = []
+  for (const itemId of config.itemIds) connections.push(await ensureConnection(db, config.userId, itemId, today))
 
+  // Primeiro o estado e as contas de TODAS as conexões: a regra das
+  // transferências entre contas do titular precisa saber quais bancos estão
+  // conectados. Se uma conexão não responde, nada é importado nesta rodada,
+  // senão um repasse vindo dela entraria como receita e contaria duas vezes.
+  const remote: Array<{ connection: Connection; item: PluggyItem; accounts: PluggyAccount[] }> = []
+  let client: PluggyClient
   try {
-    const client = options.client ?? (await createPluggyClient(config.clientId, config.clientSecret))
-    const item = await client.item(config.itemId)
-
-    const state = {
-      syncFrom: connection.syncFrom,
-      backfillCursor: connection.backfillCursor,
-      providerUpdatedAt: connection.providerUpdatedAt?.toISOString() ?? null,
-    }
-    const plan = options.manual
-      ? planManualSync(state, item.lastUpdatedAt, today)
-      : planSync(state, item.lastUpdatedAt, today)
-
-    const result: SyncResult = { plan: plan.kind, inserted: 0, updated: 0, removedPending: 0, skipped: {} }
-    const statusUpdate = {
-      status: item.status,
-      consentExpiresAt: item.consentExpiresAt ? new Date(item.consentExpiresAt) : null,
-      lastError: null,
-    }
-
-    if (plan.kind === 'idle') {
-      await db.update(bankConnections).set(statusUpdate).where(eq(bankConnections.id, connection.id))
-      return result
-    }
-
-    result.from = plan.from
-    result.to = plan.to
-
-    const accounts = await upsertAccounts(db, config, connection.id, await client.accounts(config.itemId))
-    const categoryIds = await loadCategoryIds(db, config.userId)
-    const ignored = new Set(
-      (
-        await db
-          .select({ externalId: openFinanceIgnored.externalId })
-          .from(openFinanceIgnored)
-          .where(eq(openFinanceIgnored.userId, config.userId))
-      ).map((r) => r.externalId),
-    )
-
-    for (const account of accounts) {
-      const fetched = await client.transactions(account.externalId, plan.from, plan.to)
-      await applyTransactions(db, {
-        userId: config.userId,
-        account,
-        fetched,
-        today,
-        ignored,
-        categoryIds,
-        // Só a leitura recente reconcilia pendentes: é a janela em que uma
-        // compra pendente vira definitiva (às vezes com outro ID).
-        reconcileWindow: plan.kind === 'recent' ? { from: plan.from, to: plan.to } : null,
-        result,
-      })
-    }
-
-    await db
-      .update(bankConnections)
-      .set({
-        ...statusUpdate,
-        ...(plan.kind === 'recent'
-          ? {
-              providerUpdatedAt: item.lastUpdatedAt ? new Date(item.lastUpdatedAt) : null,
-              lastSyncedAt: now,
-              backfillCursor: plan.from < connection.backfillCursor ? plan.from : connection.backfillCursor,
-            }
-          : { backfillCursor: plan.from }),
-      })
-      .where(eq(bankConnections.id, connection.id))
-
-    return result
+    client = options.client ?? (await createPluggyClient(config.clientId, config.clientSecret))
   } catch (error) {
-    await db
-      .update(bankConnections)
-      .set({ lastError: error instanceof Error ? error.message.slice(0, 500) : String(error) })
-      .where(eq(bankConnections.id, connection.id))
+    await recordError(db, connections, error)
     throw error
   }
+  for (const connection of connections) {
+    try {
+      const item = await client.item(connection.itemId)
+      const accounts = await client.accounts(connection.itemId)
+      remote.push({ connection, item, accounts })
+    } catch (error) {
+      await recordError(db, [connection], error)
+      throw error
+    }
+  }
+  const connectedBanks = new Set(
+    remote.flatMap((r) => r.accounts.map((a) => bankCodeOf(a.bankData?.transferNumber))).filter((c) => c !== null),
+  )
+
+  const categoryIds = await loadCategoryIds(db, config.userId)
+  const ignored = new Set(
+    (
+      await db
+        .select({ externalId: openFinanceIgnored.externalId })
+        .from(openFinanceIgnored)
+        .where(eq(openFinanceIgnored.userId, config.userId))
+    ).map((r) => r.externalId),
+  )
+
+  const results: ConnectionSyncResult[] = []
+  let firstError: unknown = null
+  for (const r of remote) {
+    try {
+      results.push(
+        await syncConnection(db, client, {
+          ...r,
+          userId: config.userId,
+          manual: options.manual ?? false,
+          now,
+          today,
+          connectedBanks,
+          categoryIds,
+          ignored,
+        }),
+      )
+    } catch (error) {
+      await recordError(db, [r.connection], error)
+      firstError ??= error
+      results.push({
+        itemId: r.connection.itemId,
+        plan: 'idle',
+        inserted: 0,
+        updated: 0,
+        removedPending: 0,
+        skipped: {},
+        error: errorMessage(error),
+      })
+    }
+  }
+  // Uma conexão com problema não derruba as outras; só falha de vez se
+  // nenhuma funcionou.
+  if (firstError && results.every((r) => r.error)) throw firstError
+  return { connections: results }
 }
 
-async function ensureConnection(db: Db, config: OpenFinanceConfig, today: string) {
+async function syncConnection(
+  db: Db,
+  client: PluggyClient,
+  ctx: {
+    connection: Connection
+    item: PluggyItem
+    accounts: PluggyAccount[]
+    userId: string
+    manual: boolean
+    now: Date
+    today: string
+    connectedBanks: ReadonlySet<string>
+    categoryIds: Map<string, string>
+    ignored: Set<string>
+  },
+): Promise<ConnectionSyncResult> {
+  const { connection, item, today } = ctx
+
+  const state = {
+    syncFrom: connection.syncFrom,
+    backfillCursor: connection.backfillCursor,
+    providerUpdatedAt: connection.providerUpdatedAt?.toISOString() ?? null,
+  }
+  const plan = ctx.manual
+    ? planManualSync(state, item.lastUpdatedAt, today)
+    : planSync(state, item.lastUpdatedAt, today)
+
+  const result: ConnectionSyncResult = {
+    itemId: connection.itemId,
+    plan: plan.kind,
+    inserted: 0,
+    updated: 0,
+    removedPending: 0,
+    skipped: {},
+  }
+  const statusUpdate = {
+    status: item.status,
+    consentExpiresAt: item.consentExpiresAt ? new Date(item.consentExpiresAt) : null,
+    lastError: null,
+  }
+
+  if (plan.kind === 'idle') {
+    await db.update(bankConnections).set(statusUpdate).where(eq(bankConnections.id, connection.id))
+    return result
+  }
+
+  result.from = plan.from
+  result.to = plan.to
+
+  const accounts = await upsertAccounts(db, ctx.userId, connection.id, ctx.accounts)
+  for (const account of accounts) {
+    const fetched = await client.transactions(account.externalId, plan.from, plan.to)
+    await applyTransactions(db, {
+      userId: ctx.userId,
+      account,
+      fetched,
+      today,
+      connectedBanks: ctx.connectedBanks,
+      ignored: ctx.ignored,
+      categoryIds: ctx.categoryIds,
+      // Só a leitura recente reconcilia pendentes: é a janela em que uma
+      // compra pendente vira definitiva (às vezes com outro ID).
+      reconcileWindow: plan.kind === 'recent' ? { from: plan.from, to: plan.to } : null,
+      result,
+    })
+  }
+
+  await db
+    .update(bankConnections)
+    .set({
+      ...statusUpdate,
+      ...(plan.kind === 'recent'
+        ? {
+            providerUpdatedAt: item.lastUpdatedAt ? new Date(item.lastUpdatedAt) : null,
+            lastSyncedAt: ctx.now,
+            backfillCursor: plan.from < connection.backfillCursor ? plan.from : connection.backfillCursor,
+          }
+        : { backfillCursor: plan.from }),
+    })
+    .where(eq(bankConnections.id, connection.id))
+
+  return result
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message.slice(0, 500) : String(error)
+}
+
+async function recordError(db: Db, connections: Connection[], error: unknown) {
+  if (connections.length === 0) return
+  await db
+    .update(bankConnections)
+    .set({ lastError: errorMessage(error) })
+    .where(
+      inArray(
+        bankConnections.id,
+        connections.map((c) => c.id),
+      ),
+    )
+}
+
+async function ensureConnection(db: Db, userId: string, itemId: string, today: string) {
   await db
     .insert(bankConnections)
     .values({
-      userId: config.userId,
-      itemId: config.itemId,
+      userId,
+      itemId,
       syncFrom: addDays(today, -HISTORY_DAYS),
       // Nada importado ainda: o histórico começa a partir de hoje, para trás.
       backfillCursor: today,
@@ -158,7 +270,7 @@ async function ensureConnection(db: Db, config: OpenFinanceConfig, today: string
   const [connection] = await db
     .select()
     .from(bankConnections)
-    .where(eq(bankConnections.itemId, config.itemId))
+    .where(eq(bankConnections.itemId, itemId))
     .limit(1)
   return connection!
 }
@@ -171,9 +283,9 @@ interface AccountRow {
 
 async function upsertAccounts(
   db: Db,
-  config: OpenFinanceConfig,
+  userId: string,
   connectionId: string,
-  accounts: Array<{ id: string; type: PluggyAccountType; name: string }>,
+  accounts: PluggyAccount[],
 ): Promise<AccountRow[]> {
   if (accounts.length === 0) return []
   const rows = await db
@@ -181,7 +293,7 @@ async function upsertAccounts(
     .values(
       accounts.map((a) => ({
         connectionId,
-        userId: config.userId,
+        userId,
         externalId: a.id,
         type: a.type,
         name: a.name,
@@ -232,10 +344,11 @@ async function applyTransactions(
     account: AccountRow
     fetched: PluggyTransaction[]
     today: string
+    connectedBanks: ReadonlySet<string>
     ignored: Set<string>
     categoryIds: Map<string, string>
     reconcileWindow: { from: string; to: string } | null
-    result: SyncResult
+    result: ConnectionSyncResult
   },
 ) {
   const { userId, account, fetched, today, ignored, categoryIds, result } = ctx
@@ -246,7 +359,7 @@ async function applyTransactions(
       result.skipped.ignored = (result.skipped.ignored ?? 0) + 1
       continue
     }
-    const r = mapPluggyTransaction(tx, account.type, today)
+    const r = mapPluggyTransaction(tx, account.type, today, ctx.connectedBanks)
     if (r.ok) mapped.push(r.value)
     else result.skipped[r.reason] = (result.skipped[r.reason] ?? 0) + 1
   }
@@ -316,19 +429,23 @@ async function applyTransactions(
   }
 }
 
-/** Para a tela: estado da conexão e contas do dono. */
+/**
+ * Para a tela: as conexões do dono somadas numa só. A tela mostra uma linha
+ * por conta e um aviso; o aviso usa o pior caso (o consentimento que vence
+ * primeiro, o histórico mais atrasado, um erro em qualquer conexão).
+ */
 export async function openFinanceStatus(db: Db, config: OpenFinanceConfig) {
-  const [connection] = await db
+  const connections = await db
     .select()
     .from(bankConnections)
-    .where(eq(bankConnections.itemId, config.itemId))
-    .limit(1)
-  if (!connection) return { connected: false as const }
+    .where(inArray(bankConnections.itemId, config.itemIds))
+  if (connections.length === 0) return { connected: false as const }
 
+  const ids = connections.map((c) => c.id)
   const accounts = await db
-    .select({ name: bankAccounts.name, type: bankAccounts.type })
+    .select({ connectionId: bankAccounts.connectionId, name: bankAccounts.name, type: bankAccounts.type })
     .from(bankAccounts)
-    .where(eq(bankAccounts.connectionId, connection.id))
+    .where(inArray(bankAccounts.connectionId, ids))
 
   const [counts] = await db
     .select({ total: sql<number>`count(*)::int` })
@@ -338,20 +455,31 @@ export async function openFinanceStatus(db: Db, config: OpenFinanceConfig) {
         eq(transactions.userId, config.userId),
         inArray(
           transactions.bankAccountId,
-          db.select({ id: bankAccounts.id }).from(bankAccounts).where(eq(bankAccounts.connectionId, connection.id)),
+          db.select({ id: bankAccounts.id }).from(bankAccounts).where(inArray(bankAccounts.connectionId, ids)),
         ),
       ),
     )
 
+  // O cartão vem com o nome do produto ("ultraviolet-black"); o banco sai da
+  // conta corrente da mesma conexão.
+  const bankOf = new Map(
+    accounts.filter((a) => a.type === 'BANK').map((a) => [a.connectionId, bankLabelOf(a.name)] as const),
+  )
+  const iso = (d: Date | null) => d?.toISOString() ?? null
+  const synced = connections.map((c) => c.lastSyncedAt).filter((d) => d !== null)
+  const consents = connections.map((c) => c.consentExpiresAt).filter((d) => d !== null)
+
   return {
     connected: true as const,
-    status: connection.status,
-    lastSyncedAt: connection.lastSyncedAt?.toISOString() ?? null,
-    consentExpiresAt: connection.consentExpiresAt?.toISOString() ?? null,
-    historyComplete: connection.backfillCursor <= connection.syncFrom,
-    historyFrom: connection.backfillCursor,
-    lastError: connection.lastError,
-    accounts,
+    status: connections.find((c) => c.status !== 'UPDATED')?.status ?? 'UPDATED',
+    // A sincronização mais antiga: "há X min" não pode esconder uma conexão parada.
+    lastSyncedAt:
+      synced.length === connections.length ? iso(new Date(Math.min(...synced.map((d) => d.getTime())))) : null,
+    consentExpiresAt: consents.length ? iso(new Date(Math.min(...consents.map((d) => d.getTime())))) : null,
+    historyComplete: connections.every((c) => c.backfillCursor <= c.syncFrom),
+    historyFrom: connections.map((c) => c.backfillCursor).sort().at(-1)!,
+    lastError: connections.find((c) => c.lastError)?.lastError ?? null,
+    accounts: accounts.map((a) => ({ name: a.name, type: a.type, bank: bankOf.get(a.connectionId) ?? bankLabelOf(a.name) })),
     importedCount: counts?.total ?? 0,
   }
 }

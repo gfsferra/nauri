@@ -1,5 +1,7 @@
 import {
   amountToCents,
+  bankCodeOf,
+  bankLabelOf,
   categoryFor,
   mapPluggyTransaction,
   occurredOnOf,
@@ -36,6 +38,28 @@ describe('amountToCents', () => {
   it('ignora o sinal: o tipo do lançamento vem de outra regra', () => {
     expect(amountToCents(-76)).toBe(7600)
     expect(amountToCents(-30.05)).toBe(3005)
+  })
+})
+
+describe('bankCodeOf', () => {
+  it('tira o código do banco do número de transferência', () => {
+    expect(bankCodeOf('341/0001/12345-6')).toBe('341')
+    expect(bankCodeOf('260/0001/1234567-8')).toBe('260')
+  })
+
+  it('devolve null sem número ou com formato inesperado', () => {
+    expect(bankCodeOf(null)).toBeNull()
+    expect(bankCodeOf(undefined)).toBeNull()
+    expect(bankCodeOf('')).toBeNull()
+    expect(bankCodeOf('itau')).toBeNull()
+  })
+})
+
+describe('bankLabelOf', () => {
+  it('encurta o nome da conta para o nome do banco', () => {
+    expect(bankLabelOf('Nu Pagamentos S.A. - Instituição de Pagamento')).toBe('Nubank')
+    expect(bankLabelOf('itau')).toBe('Itaú')
+    expect(bankLabelOf('Banco Inter - Conta')).toBe('Banco Inter')
   })
 })
 
@@ -127,6 +151,32 @@ describe('mapPluggyTransaction: conta corrente', () => {
       )
       expect(r.ok && r.value).toMatchObject({ kind: 'income', amountCents: 300050, categoryName: 'Salário' })
     }
+  })
+
+  it('entrada vinda de banco também conectado é descartada: o dinheiro já entrou pela outra conta', () => {
+    const repasse = tx({
+      amount: 3000.5,
+      type: 'CREDIT',
+      category: 'Same person transfer',
+      operationType: 'PIX',
+      paymentData: { payer: { routingNumber: '341' } },
+    })
+    expect(mapPluggyTransaction(repasse, 'BANK', TODAY, new Set(['260', '341']))).toEqual({
+      ok: false,
+      reason: 'own_transfer',
+    })
+    // O mesmo repasse, com o banco de origem fora do Nauri, é dinheiro novo.
+    expect(mapPluggyTransaction(repasse, 'BANK', TODAY, new Set(['260'])).ok).toBe(true)
+  })
+
+  it('entrada do titular sem banco de origem informado conta como receita', () => {
+    const r = mapPluggyTransaction(
+      tx({ amount: 50, type: 'CREDIT', category: 'Same person transfer', paymentData: null }),
+      'BANK',
+      TODAY,
+      new Set(['260', '341']),
+    )
+    expect(r.ok && r.value.kind).toBe('income')
   })
 
   it('ignora aplicação e resgate automáticos', () => {

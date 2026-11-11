@@ -23,6 +23,8 @@ export interface PluggyTransaction {
   status: 'PENDING' | 'POSTED'
   type: 'DEBIT' | 'CREDIT'
   operationType: string | null
+  /** Dados do Pix/TED. `routingNumber` é o código do banco (COMPE), ex.: "341". */
+  paymentData?: { payer?: { routingNumber?: string | null } | null } | null
 }
 
 export interface MappedTransaction {
@@ -165,7 +167,30 @@ export function occurredOnOf(isoTimestamp: string): string {
   return todayInTimezone(new Date(isoTimestamp))
 }
 
-function skipReason(tx: PluggyTransaction, accountType: PluggyAccountType): SkipReason | null {
+/**
+ * Código do banco (COMPE) de uma conta da Pluggy, tirado do número de
+ * transferência ("341/0001/12345-6" → "341"). Null no cartão, que não tem.
+ */
+export function bankCodeOf(transferNumber: string | null | undefined): string | null {
+  const code = transferNumber?.split('/')[0]?.trim()
+  return code && /^\d{3}$/.test(code) ? code : null
+}
+
+/**
+ * Nome curto do banco para a tela, a partir do nome da conta na Pluggy
+ * ("Nu Pagamentos S.A. - Instituição de Pagamento" → "Nubank").
+ */
+export function bankLabelOf(accountName: string): string {
+  if (/nu pagamentos|nubank/i.test(accountName)) return 'Nubank'
+  if (/ita[uú]/i.test(accountName)) return 'Itaú'
+  return accountName.split(' - ')[0]!.trim()
+}
+
+function skipReason(
+  tx: PluggyTransaction,
+  accountType: PluggyAccountType,
+  connectedBanks: ReadonlySet<string>,
+): SkipReason | null {
   const category = tx.category ?? ''
   if (
     category === 'Credit card payment' ||
@@ -176,12 +201,15 @@ function skipReason(tx: PluggyTransaction, accountType: PluggyAccountType): Skip
   ) {
     return 'bill_payment'
   }
-  // Entre contas do próprio titular, só a saída é descartada. A entrada vem de
-  // uma conta que não está conectada (o salário que cai em outro banco e é
-  // repassado, por exemplo) e, para o Nauri, é dinheiro novo. Quando houver
-  // mais de uma conexão, a entrada vinda de conta conectada também precisa
-  // sair daqui, senão conta duas vezes.
-  if (category.startsWith('Same person transfer') && isOutflow(tx, accountType)) return 'own_transfer'
+  // Entre contas do próprio titular, a saída é sempre descartada. A entrada
+  // só quando vem de um banco também conectado: aí o dinheiro já entrou no
+  // Nauri pela outra conta (o salário que cai num banco e é repassado a
+  // outro, por exemplo). Vinda de banco não conectado, é dinheiro novo.
+  if (category.startsWith('Same person transfer')) {
+    if (isOutflow(tx, accountType)) return 'own_transfer'
+    const payerBank = tx.paymentData?.payer?.routingNumber
+    if (payerBank && connectedBanks.has(payerBank)) return 'own_transfer'
+  }
   if (INVESTMENT_CATEGORIES.has(category)) return 'investment'
   return null
 }
@@ -195,8 +223,10 @@ export function mapPluggyTransaction(
   tx: PluggyTransaction,
   accountType: PluggyAccountType,
   today: string,
+  /** Códigos dos bancos com conta conectada (ver `bankCodeOf`). */
+  connectedBanks: ReadonlySet<string> = new Set(),
 ): MapResult {
-  const reason = skipReason(tx, accountType)
+  const reason = skipReason(tx, accountType, connectedBanks)
   if (reason) return { ok: false, reason }
 
   const amountCents = amountToCents(tx.amount)
