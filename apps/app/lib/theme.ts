@@ -180,7 +180,6 @@ export const radius = { sm: 11, md: 14, lg: 16, card: 22, full: 99 }
  */
 export const type = {
   balance: { fontSize: 40, fontWeight: '700', letterSpacing: -1.4, lineHeight: 42 },
-  keypad: { fontSize: 44, fontWeight: '700', letterSpacing: -1.6 },
   title: { fontSize: 26, fontWeight: '700', letterSpacing: -0.8 },
   heading: { fontSize: 19, fontWeight: '600', letterSpacing: -0.4 },
   section: { fontSize: 15, fontWeight: '600', letterSpacing: -0.2 },

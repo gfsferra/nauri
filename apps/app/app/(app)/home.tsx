@@ -144,7 +144,6 @@ export default function Home() {
   const delta = summary.data && before.data ? percentDelta(balance, projected(before.data)) : null
 
   const quickActions = [
-    { key: 'new', label: 'Novo', icon: 'add-outline', go: () => router.push('/new') },
     { key: 'reports', label: 'Relatórios', icon: 'pie-chart-outline', go: () => router.push('/reports') },
     { key: 'import', label: 'Importar', icon: 'cloud-upload-outline', go: () => router.push('/import') },
     { key: 'settings', label: 'Perfil', icon: 'person-outline', go: () => router.push('/settings') },
@@ -449,7 +448,7 @@ export default function Home() {
             <Gutter>
               <EmptyState
                 title={`Nenhum lançamento em ${formatMonth(month)}.`}
-                hint="Toque em Novo para registrar o primeiro — ou importe sua planilha em Perfil."
+                hint="Os lançamentos chegam do banco pelo Open Finance, ou pela importação de planilha em Perfil."
               />
             </Gutter>
           )

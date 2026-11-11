@@ -1,6 +1,5 @@
 import { zValidator } from '@hono/zod-validator'
 import {
-  transactionCreateSchema,
   transactionListQuerySchema,
   transactionUpdateSchema,
 } from '@nauri/contracts'
@@ -104,27 +103,6 @@ export const transactionsRoute = new Hono<AppContext>()
       items,
       nextCursor: hasMore && last ? encodeCursor(last.occurredOn, last.id) : null,
     })
-  })
-
-  .post('/', zValidator('json', transactionCreateSchema), async (c) => {
-    const body = c.req.valid('json')
-    const userId = c.get('userId')
-
-    const category = await findOwnedCategory(c.get('db'), userId, body.categoryId)
-    if (!category) return c.json({ error: 'Categoria não encontrada' }, 404)
-    if (category.kind !== body.kind) {
-      return c.json(
-        { error: `Categoria é de ${category.kind === 'expense' ? 'gasto' : 'ganho'}` },
-        400,
-      )
-    }
-
-    const [row] = await c
-      .get('db')
-      .insert(transactions)
-      .values({ ...body, userId })
-      .returning()
-    return c.json(row, 201)
   })
 
   .patch(
