@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
-import { Alert, Pressable, SectionList, Text, View } from 'react-native'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Alert, Animated, Easing, PanResponder, Pressable, SectionList, Text, View } from 'react-native'
 import {
   Amount,
   Skeleton,
@@ -16,10 +16,10 @@ import {
   useTabBarSpace,
   CategoryIcon,
 } from '@/components/ui'
+import { MonthStrip } from '@/components/month-strip'
 import { client, unwrap } from '@/lib/api'
 import {
   addMonths,
-  capitalize,
   currentMonth,
   formatBRL,
   formatMonth,
@@ -50,6 +50,41 @@ export default function Home() {
 
   const [month, setMonth] = useState(currentMonth())
   const [hidden, setHidden] = useState(false)
+
+  // Trocar de mês desliza o saldo no sentido da troca: o mês seguinte entra
+  // pela direita, o anterior pela esquerda.
+  const direction = useRef(0)
+  const slide = useRef(new Animated.Value(0)).current
+  const fade = useRef(new Animated.Value(1)).current
+  function goTo(next: string) {
+    if (next === month) return
+    direction.current = next > month ? 1 : -1
+    setMonth(next)
+  }
+  useEffect(() => {
+    if (!direction.current) return
+    slide.setValue(direction.current * 28)
+    fade.setValue(0)
+    Animated.parallel([
+      Animated.timing(slide, { toValue: 0, duration: 240, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(fade, { toValue: 1, duration: 200, useNativeDriver: true }),
+    ]).start()
+  }, [month, slide, fade])
+
+  // Arrastar o saldo para o lado troca o mês, como virar a página. Só gesto
+  // claramente horizontal: a rolagem vertical da lista continua livre.
+  const swipe = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+        onPanResponderRelease: (_, g) => {
+          if (g.dx < -50) goTo(addMonths(month, 1))
+          else if (g.dx > 50) goTo(addMonths(month, -1))
+        },
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [month],
+  )
   const { from, to } = monthBounds(month)
 
   const summary = useQuery({
@@ -134,44 +169,43 @@ export default function Home() {
         contentContainerStyle={{ paddingBottom: tabBarSpace }}
         ListHeaderComponent={
           <View style={{ gap: spacing.xl, paddingBottom: spacing.sm }}>
-            {/* ── o mês e o olho de privacidade ── */}
-            <Gutter style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Pressable onPress={() => setMonth(addMonths(month, -1))} accessibilityLabel="Mês anterior" hitSlop={12}>
-                <Ionicons name="chevron-back" size={20} color={theme.text3} />
-              </Pressable>
-              <Pressable onPress={() => setMonth(currentMonth())} accessibilityLabel="Voltar para o mês atual">
-                <Text style={{ ...type.heading, color: theme.text }}>{capitalize(formatMonth(month))}</Text>
-              </Pressable>
-              <Pressable onPress={() => setMonth(addMonths(month, 1))} accessibilityLabel="Próximo mês" hitSlop={12}>
-                <Ionicons name="chevron-forward" size={20} color={theme.text3} />
-              </Pressable>
-              <View style={{ flex: 1 }} />
-              <Pressable
-                onPress={() => setHidden((v) => !v)}
-                accessibilityRole="button"
-                accessibilityLabel={hidden ? 'Mostrar valores' : 'Ocultar valores'}
-                accessibilityState={{ checked: hidden }}
-                hitSlop={8}
-                style={styles.iconButton}
-              >
-                <Ionicons name={hidden ? 'eye-off-outline' : 'eye-outline'} size={22} color={theme.text2} />
-              </Pressable>
-            </Gutter>
+            {/* ── a faixa de meses ── */}
+            <MonthStrip month={month} onChange={goTo} />
 
             {/* ── saldo, e de onde ele vem ── */}
-            <Gutter>
-              {/* Esqueleto no lugar do número, na mesma altura: o layout não
-                  salta quando o saldo chega (DS, decisão 04). */}
-              {summary.data ? (
-                <Text
-                  accessibilityLabel={hidden ? 'Saldo oculto' : `Saldo de ${formatBRL(balance)}`}
-                  style={[type.balance, tabular, { color: theme.text }]}
+            <Animated.View
+              {...swipe.panHandlers}
+              style={{ paddingHorizontal: spacing.gutter, opacity: fade, transform: [{ translateX: slide }] }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  {/* Esqueleto no lugar do número, na mesma altura: o layout não
+                      salta quando o saldo chega (DS, decisão 04). */}
+                  {summary.data ? (
+                    <Text
+                      accessibilityLabel={hidden ? 'Saldo oculto' : `Saldo de ${formatBRL(balance)}`}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      style={[type.balance, tabular, { color: theme.text }]}
+                    >
+                      {mask(formatBRL(balance), hidden)}
+                    </Text>
+                  ) : (
+                    <Skeleton width={230} height={38} style={{ borderRadius: 10 }} />
+                  )}
+                </View>
+                {/* O olho fica ao lado do valor que ele esconde. */}
+                <Pressable
+                  onPress={() => setHidden((v) => !v)}
+                  accessibilityRole="button"
+                  accessibilityLabel={hidden ? 'Mostrar valores' : 'Ocultar valores'}
+                  accessibilityState={{ checked: hidden }}
+                  hitSlop={8}
+                  style={styles.iconButton}
                 >
-                  {mask(formatBRL(balance), hidden)}
-                </Text>
-              ) : (
-                <Skeleton width={230} height={38} style={{ borderRadius: 10 }} />
-              )}
+                  <Ionicons name={hidden ? 'eye-off-outline' : 'eye-outline'} size={22} color={theme.text2} />
+                </Pressable>
+              </View>
               {/* O saldo já conta o salário a cair e as contas fixas a cobrar:
                   sem isso, todo começo de mês parece negativo. Os valores
                   previstos aparecem na lista, marcados como "previsto". */}
@@ -195,7 +229,7 @@ export default function Home() {
                   hidden={hidden}
                 />
               </View>
-            </Gutter>
+            </Animated.View>
 
             {/* ── fatura em aberto do cartão (Open Finance) ── */}
             {cards.length ? (
