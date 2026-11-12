@@ -1,12 +1,44 @@
 import { Ionicons } from '@expo/vector-icons'
-import { useEffect, useRef, useState } from 'react'
-import { Animated, Pressable, Text, View } from 'react-native'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { Animated, Easing, Pressable, Text, View } from 'react-native'
 import { Skeleton, mask } from '@/components/ui'
 import { formatBRL } from '@/lib/format'
-import { useTween } from '@/lib/motion'
+import { useReducedMotion, useTween } from '@/lib/motion'
 import { radius, tabular, type, useTheme } from '@/lib/theme'
 
-/* Peças de número e de escolha que os Relatórios e os Investimentos dividem. */
+/* Peças de número e de escolha que os Relatórios, os Investimentos e o Perfil dividem. */
+
+/**
+ * Um bloco que sobe e aparece ao abrir a tela, um depois do outro pelo
+ * `index`, como os indicadores dos Investimentos.
+ */
+export function Rise({ index = 0, children }: { index?: number; children: ReactNode }) {
+  const reduced = useReducedMotion()
+  const rise = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    if (reduced) {
+      rise.setValue(1)
+      return
+    }
+    Animated.timing(rise, {
+      toValue: 1,
+      duration: 420,
+      delay: 40 + index * 70,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start()
+  }, [rise, index, reduced])
+  return (
+    <Animated.View
+      style={{
+        opacity: rise,
+        transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+      }}
+    >
+      {children}
+    </Animated.View>
+  )
+}
 
 /** O número grande da tela, contando até o valor novo em vez de saltar. */
 export function CountUp({ cents, hidden }: { cents: number; hidden: boolean }) {
