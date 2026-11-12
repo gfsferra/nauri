@@ -29,6 +29,7 @@ export const byCategoryRowSchema = z.object({
   categoryId: uuidSchema,
   categoryName: z.string(),
   categoryColor: z.string(),
+  categoryIcon: z.string().nullable(),
   kind: kindSchema,
   totalCents: z.number().int(),
   transactionCount: z.number().int(),

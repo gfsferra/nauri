@@ -97,6 +97,7 @@ export const reportsRoute = new Hono<AppContext>()
         categoryId: categories.id,
         categoryName: categories.name,
         categoryColor: categories.color,
+        categoryIcon: categories.icon,
         kind: transactions.kind,
         total: sql`SUM(${transactions.amountCents})`,
         transactionCount: sql<number>`COUNT(*)::int`,
@@ -104,7 +105,7 @@ export const reportsRoute = new Hono<AppContext>()
       .from(transactions)
       .innerJoin(categories, eq(categories.id, transactions.categoryId))
       .where(and(...filters))
-      .groupBy(categories.id, categories.name, categories.color, transactions.kind)
+      .groupBy(categories.id, categories.name, categories.color, categories.icon, transactions.kind)
       .orderBy(desc(sql`SUM(${transactions.amountCents})`))
 
     return c.json(
@@ -112,6 +113,7 @@ export const reportsRoute = new Hono<AppContext>()
         categoryId: r.categoryId,
         categoryName: r.categoryName,
         categoryColor: r.categoryColor,
+        categoryIcon: r.categoryIcon,
         kind: r.kind,
         totalCents: toCents(r.total),
         transactionCount: r.transactionCount,

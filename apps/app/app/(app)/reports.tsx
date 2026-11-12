@@ -1,19 +1,29 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
-import Svg, { Circle, G } from 'react-native-svg'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  AccessibilityInfo,
+  Animated,
+  Easing,
+  PanResponder,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native'
+import Svg, { Circle, G, Line, Path } from 'react-native-svg'
 import {
   Card,
+  CategoryIcon,
   EmptyState,
   ErrorBanner,
   Gutter,
   Screen,
-  SectionLabel,
   Skeleton,
-  Title,
   useTabBarSpace,
 } from '@/components/ui'
+import { MonthStrip } from '@/components/month-strip'
 import { client, unwrap } from '@/lib/api'
 import {
   addMonths,
@@ -23,265 +33,1058 @@ import {
   formatMonth,
   monthBounds,
   percentDelta,
+  today,
 } from '@/lib/format'
 import { radius, spacing, tabular, type, useTheme } from '@/lib/theme'
 
-/** Medidas da rosca, copiadas do artboard: 112px de caixa, raio 41, traço 13. */
-const SIZE = 112
-const RADIUS = 41
-const STROKE = 13
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS
-/** O respiro de 2px entre fatias que o DS desenha. */
-const GAP = 2
+type Kind = 'expense' | 'income'
+
+/** Quantos meses o gráfico de evolução mostra, e quantos a API devolve. */
+const TREND = 12
+const HISTORY = 24
+
+/** 'novembro de 2026' → 'novembro'. */
+const monthName = (month: string) => formatMonth(month).replace(/ de \d{4}$/, '')
+/** 'novembro de 2026' → 'nov'. */
+const shortMonth = (month: string) => formatMonth(month).slice(0, 3)
+/** "R$ 1.234,56" sem os centavos, para rótulo de gráfico e frase. */
+const roundBRL = (cents: number) => formatBRL(Math.round(cents / 100) * 100).replace(/,00$/, '')
 
 export default function Reports() {
   const theme = useTheme()
   const tabBarSpace = useTabBarSpace()
-  const [month, setMonth] = useState(currentMonth())
-  const { from, to } = monthBounds(month)
+  const now = currentMonth()
+
+  const [month, setMonth] = useState(now)
+  const [kind, setKind] = useState<Kind>('expense')
   const previous = addMonths(month, -1)
+  // No mês corrente, o anterior entra só até o mesmo dia: comparar 11 dias de
+  // novembro com outubro inteiro faria todo mês parecer econômico.
+  const day = Number(today().slice(8, 10))
+  const partial = month === now
+  const previousRange = (() => {
+    const bounds = monthBounds(previous)
+    if (!partial) return bounds
+    const last = Number(bounds.to.slice(8, 10))
+    return { from: bounds.from, to: `${previous}-${String(Math.min(day, last)).padStart(2, '0')}` }
+  })()
+  const against = partial
+    ? `1–${previousRange.to.slice(8, 10).replace(/^0/, '')} ${shortMonth(previous)}`
+    : shortMonth(previous)
+
+  // Trocar de mês desliza o número no sentido da troca, como na Início.
+  const direction = useRef(0)
+  const slide = useRef(new Animated.Value(0)).current
+  const fade = useRef(new Animated.Value(1)).current
+  function goTo(next: string) {
+    if (next === month) return
+    direction.current = next > month ? 1 : -1
+    setMonth(next)
+  }
+  useEffect(() => {
+    if (!direction.current) return
+    slide.setValue(direction.current * 28)
+    fade.setValue(0)
+    Animated.parallel([
+      Animated.timing(slide, { toValue: 0, duration: 240, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(fade, { toValue: 1, duration: 200, useNativeDriver: true }),
+    ]).start()
+  }, [month, slide, fade])
+
+  const swipe = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+        onPanResponderRelease: (_, g) => {
+          if (g.dx < -50) goTo(addMonths(month, 1))
+          else if (g.dx > 50) goTo(addMonths(month, -1))
+        },
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [month],
+  )
 
   const byCategory = useQuery({
-    queryKey: ['by-category', month],
-    queryFn: async () =>
-      unwrap(await client.reports['by-category'].$get({ query: { from, to, kind: 'expense' } })),
+    queryKey: ['by-category', month, kind],
+    queryFn: async () => {
+      const { from, to } = monthBounds(month)
+      return unwrap(await client.reports['by-category'].$get({ query: { from, to, kind } }))
+    },
   })
-
+  // O mês anterior por categoria dá a variação de cada linha e os destaques.
+  const byCategoryBefore = useQuery({
+    queryKey: ['by-category', previous, kind, previousRange.to],
+    queryFn: async () => {
+      const { from, to } = previousRange
+      return unwrap(await client.reports['by-category'].$get({ query: { from, to, kind } }))
+    },
+  })
+  // Mesma chave da Início: o cache é um só.
   const summary = useQuery({
     queryKey: ['summary', month],
     queryFn: async () => unwrap(await client.reports.summary.$get({ query: { month } })),
   })
-
-  const before = useQuery({
-    queryKey: ['summary', previous],
-    queryFn: async () => unwrap(await client.reports.summary.$get({ query: { month: previous } })),
+  // O mês corrente leva a previsão por cima da barra dele no gráfico.
+  const summaryNow = useQuery({
+    queryKey: ['summary', now],
+    queryFn: async () => unwrap(await client.reports.summary.$get({ query: { month: now } })),
+  })
+  const monthly = useQuery({
+    queryKey: ['monthly', HISTORY],
+    queryFn: async () => unwrap(await client.reports.monthly.$get({ query: { months: String(HISTORY) } })),
   })
 
-  const rows = byCategory.data ?? []
+  const rows = useMemo(
+    () => [...(byCategory.data ?? [])].sort((a, b) => b.totalCents - a.totalCents),
+    [byCategory.data],
+  )
+  const beforeById = useMemo(
+    () => new Map((byCategoryBefore.data ?? []).map((r) => [r.categoryId, r.totalCents])),
+    [byCategoryBefore.data],
+  )
   const total = rows.reduce((sum, row) => sum + row.totalCents, 0)
+  const count = rows.reduce((sum, row) => sum + row.transactionCount, 0)
 
-  /**
-   * O DS pede uma cor de destaque e uma rampa slate — sem legenda arco-íris.
-   * A rampa tem quatro degraus, então as três maiores categorias ficam
-   * nomeadas e o resto vira 'Outras': o gráfico nunca cresce além do sistema.
-   */
-  const slices = useMemo(() => {
-    const sorted = [...rows].sort((a, b) => b.totalCents - a.totalCents)
-    const top = sorted.slice(0, 3).map((row) => ({
-      key: row.categoryId,
-      name: row.categoryName,
-      cents: row.totalCents,
-      count: row.transactionCount,
-    }))
-    const rest = sorted.slice(3)
-    if (rest.length) {
-      top.push({
-        key: 'outras',
-        name: `Outras (${rest.length})`,
-        cents: rest.reduce((sum, row) => sum + row.totalCents, 0),
-        count: rest.reduce((sum, row) => sum + row.transactionCount, 0),
-      })
-    }
-    return top.map((slice, index) => ({ ...slice, color: theme.chartRamp[index] }))
-  }, [rows, theme.chartRamp])
+  const valueOf = (s: { incomeCents: number; expenseCents: number }) =>
+    kind === 'expense' ? s.expenseCents : s.incomeCents
+  const forecastOf = (s: { forecastIncomeCents: number; forecastExpenseCents: number }) =>
+    kind === 'expense' ? s.forecastExpenseCents : s.forecastIncomeCents
 
-  const delta =
-    summary.data && before.data
-      ? percentDelta(summary.data.expenseCents, before.data.expenseCents)
-      : null
+  const series = monthly.data ?? []
+  const beforeTotal = (byCategoryBefore.data ?? []).reduce((sum, row) => sum + row.totalCents, 0)
+  const delta = byCategoryBefore.data && total > 0 ? percentDelta(total, beforeTotal) : null
+  const forecast = summary.data ? forecastOf(summary.data) : 0
+
+  // Média por dia: no mês corrente, pelos dias que já passaram.
+  const days = month > now ? 0 : partial ? day : Number(monthBounds(month).to.slice(8, 10))
+
+  // Gráfico de 12 meses: fica parado enquanto o mês escolhido estiver dentro
+  // dele, e só o destaque anda. Fora da janela, ela acompanha o mês.
+  const windowEnd =
+    month > now ? month : month > addMonths(now, -TREND) ? now : addMonths(month, TREND - 1)
+  const trend = useMemo(() => {
+    const found = new Map(series.map((m) => [m.month, m]))
+    return Array.from({ length: TREND }, (_, i) => {
+      const m = addMonths(windowEnd, i - (TREND - 1))
+      const row = found.get(m)
+      return {
+        month: m,
+        cents: row ? valueOf(row) : 0,
+        forecast: m === now && summaryNow.data ? forecastOf(summaryNow.data) : 0,
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [series, windowEnd, kind, summaryNow.data, now])
+
+  /* A categoria em foco na rosca. Começa na maior e volta a ela a cada troca
+     de mês ou de tipo. */
+  const [focus, setFocus] = useState<string | null>(null)
+  useEffect(() => setFocus(null), [month, kind])
+  const focused = rows.find((r) => r.categoryId === focus) ?? rows[0] ?? null
+
+  const insights = useMemo(
+    () =>
+      buildInsights({
+        rows,
+        beforeById,
+        total,
+        kind,
+        month,
+        now,
+        forecast,
+        against: partial ? `1 a ${Math.min(day, Number(monthBounds(previous).to.slice(8, 10)))} de ${monthName(previous)}` : monthName(previous),
+      }),
+    [rows, beforeById, total, kind, month, now, forecast, previous, partial, day],
+  )
+
+  const loading = byCategory.isPending
+  const error = byCategory.error?.message ?? summary.error?.message ?? monthly.error?.message
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ paddingBottom: tabBarSpace, gap: spacing.xl }}>
-        <Gutter style={{ gap: spacing.lg }}>
-          <Title>Relatórios</Title>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: tabBarSpace, gap: spacing.xl }}
+        refreshControl={
+          <RefreshControl
+            refreshing={byCategory.isRefetching}
+            onRefresh={() => {
+              byCategory.refetch()
+              byCategoryBefore.refetch()
+              summary.refetch()
+              monthly.refetch()
+            }}
+          />
+        }
+      >
+        {/* ── a faixa de meses, a mesma da Início ── */}
+        <MonthStrip month={month} onChange={goTo} />
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-            <Pressable onPress={() => setMonth(addMonths(month, -1))} hitSlop={12} accessibilityLabel="Mês anterior">
-              <Ionicons name="chevron-back" size={18} color={theme.text3} />
-            </Pressable>
-            <Pressable onPress={() => setMonth(currentMonth())} accessibilityLabel="Voltar para o mês atual">
-              <Text style={{ ...type.body, fontWeight: '600', color: theme.text2 }}>
-                {capitalize(formatMonth(month))}
-              </Text>
-            </Pressable>
-            <Pressable onPress={() => setMonth(addMonths(month, 1))} hitSlop={12} accessibilityLabel="Próximo mês">
-              <Ionicons name="chevron-forward" size={18} color={theme.text3} />
-            </Pressable>
-          </View>
+        <Gutter style={{ gap: spacing.xl }}>
+          <Segmented
+            value={kind}
+            onChange={setKind}
+            options={[
+              { value: 'expense', label: 'Gastos', icon: 'arrow-down' },
+              { value: 'income', label: 'Entradas', icon: 'arrow-up' },
+            ]}
+          />
 
-          <ErrorBanner message={byCategory.error?.message} />
-        </Gutter>
+          {/* ── o número do mês ── */}
+          <Animated.View {...swipe.panHandlers} style={{ opacity: fade, transform: [{ translateX: slide }] }}>
+            <Text style={{ ...type.caption, color: theme.text2 }}>
+              {kind === 'expense' ? 'Gastos' : 'Entradas'} em {monthName(month)}
+            </Text>
+            {loading ? (
+              <Skeleton width={220} height={38} style={{ borderRadius: 10, marginTop: 6 }} />
+            ) : (
+              <CountUp cents={total} />
+            )}
 
-        {byCategory.isPending ? (
-          /* O esqueleto guarda a forma do cartão inteiro — rosca e legenda —
-             para nada saltar quando o relatório chega (DS, decisão 04). */
-          <Gutter>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: 10 }}>
+              {delta !== null ? <DeltaPill delta={delta} kind={kind} against={against} /> : null}
+              {forecast > 0 ? (
+                <Text style={{ ...type.caption, color: theme.text2 }}>
+                  + <Text style={[{ fontWeight: '600', color: theme.text }, tabular]}>{formatBRL(forecast)}</Text>{' '}
+                  {kind === 'expense' ? 'previstos até o fim do mês' : 'previstos para cair'}
+                </Text>
+              ) : null}
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: spacing.xl, marginTop: spacing.lg }}>
+              {kind === 'expense' ? (
+                <Figure label="Por dia" value={loading ? null : days > 0 ? formatBRL(Math.round(total / days)) : '—'} />
+              ) : (
+                // Nas entradas, a média por dia não diz nada; o que sobrou, sim.
+                <Figure
+                  label="Sobrou no mês"
+                  value={
+                    summary.data
+                      ? `${summary.data.balanceCents < 0 ? '−' : ''}${formatBRL(Math.abs(summary.data.balanceCents))}`
+                      : null
+                  }
+                />
+              )}
+              <Figure label="Lançamentos" value={loading ? null : String(count)} />
+              <Figure label="Categorias" value={loading ? null : String(rows.length)} />
+            </View>
+          </Animated.View>
+
+          <ErrorBanner message={error} />
+
+          {/* ── evolução ── */}
+          <Card>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+              <Text style={{ ...type.section, color: theme.text }}>Últimos 12 meses</Text>
+              <TrendAverage trend={trend} now={now} />
+            </View>
+            <TrendChart trend={trend} selected={month} now={now} loading={monthly.isPending} onPick={goTo} />
+          </Card>
+
+          {/* ── destaques ── */}
+          {!loading && insights.length ? (
+            <View style={{ gap: spacing.md }}>
+              <Text style={{ ...type.section, color: theme.text }}>Destaques</Text>
+              <View style={{ gap: spacing.sm }}>
+                {insights.map((insight, i) => (
+                  <InsightRow key={insight.key} insight={insight} index={i} />
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {/* ── por categoria ── */}
+          {loading ? (
             <Card>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xl }}>
+              <View style={{ alignItems: 'center', paddingVertical: spacing.sm }}>
                 <View
                   style={{
-                    width: SIZE,
-                    height: SIZE,
-                    borderRadius: SIZE / 2,
+                    width: DONUT,
+                    height: DONUT,
+                    borderRadius: DONUT / 2,
                     borderWidth: STROKE,
                     borderColor: theme.skeleton,
                   }}
                 />
-                <View style={{ flex: 1, gap: 11 }}>
-                  {[0, 1, 2, 3].map((i) => (
-                    <Skeleton key={i} width="100%" height={11} delay={i * 90} />
-                  ))}
-                </View>
+              </View>
+              <View style={{ gap: 14, marginTop: spacing.xl }}>
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} width="100%" height={12} delay={i * 90} />
+                ))}
               </View>
             </Card>
-          </Gutter>
-        ) : slices.length === 0 ? (
-          <Gutter>
+          ) : rows.length === 0 ? (
             <EmptyState
-              title={`Sem gastos em ${formatMonth(month)}.`}
-              hint="Assim que houver lançamentos de saída, a divisão por categoria aparece aqui."
+              title={`Sem ${kind === 'expense' ? 'gastos' : 'entradas'} em ${formatMonth(month)}.`}
+              hint={
+                kind === 'expense'
+                  ? 'Assim que houver lançamentos de saída, a divisão por categoria aparece aqui.'
+                  : 'Assim que cair alguma entrada, a divisão por categoria aparece aqui.'
+              }
             />
-          </Gutter>
-        ) : (
-          <Gutter style={{ gap: spacing.xl }}>
-            <Card>
-              <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          ) : (
+            <Card style={{ paddingHorizontal: 0, paddingBottom: spacing.sm }}>
+              <View style={{ paddingHorizontal: 18 }}>
                 <Text style={{ ...type.section, color: theme.text }}>
-                  Gastos de {formatMonth(month).split(' de ')[0]}
+                  {kind === 'expense' ? 'Para onde foi' : 'De onde veio'}
                 </Text>
-                <Text style={{ ...type.body, ...tabular, color: theme.text2 }}>{formatBRL(total)}</Text>
+                <Text style={{ ...type.caption, color: theme.text2, marginTop: 2 }}>
+                  Toque numa categoria para ver a fatia dela
+                </Text>
               </View>
 
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xl, marginTop: 14 }}>
-                <View style={{ width: SIZE, height: SIZE }}>
-                  <Svg width={SIZE} height={SIZE}>
-                    {/* -90° põe a primeira fatia no topo, como no artboard.
-                        O pivô vai dentro do próprio `rotate()`: o prop
-                        `rotation` do react-native-svg depende de originX/originY,
-                        que na web viram o atributo `transform-origin` em
-                        kebab-case — nome que o React DOM recusa, deixando a
-                        rosca girar em torno de (0,0). */}
-                    <G transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}>
-                      <Circle
-                        cx={SIZE / 2}
-                        cy={SIZE / 2}
-                        r={RADIUS}
-                        fill="none"
-                        stroke={theme.track}
-                        strokeWidth={STROKE}
-                      />
-                      {slices.map((slice, index) => {
-                        const before_ = slices
-                          .slice(0, index)
-                          .reduce((sum, s) => sum + (s.cents / total) * CIRCUMFERENCE, 0)
-                        const length = (slice.cents / total) * CIRCUMFERENCE
-                        return (
-                          <Circle
-                            key={slice.key}
-                            cx={SIZE / 2}
-                            cy={SIZE / 2}
-                            r={RADIUS}
-                            fill="none"
-                            stroke={slice.color}
-                            strokeWidth={STROKE}
-                            strokeDasharray={`${Math.max(length - GAP, 0)} ${CIRCUMFERENCE - length + GAP}`}
-                            strokeDashoffset={-before_}
-                          />
-                        )
-                      })}
-                    </G>
-                  </Svg>
+              <Donut
+                rows={rows}
+                total={total}
+                focused={focused}
+                revealKey={`${month}:${kind}`}
+              />
 
-                  {/* O centro carrega só a comparação mês a mês — sem valores
-                      flutuantes sobre o gráfico (DS, decisão 05). */}
-                  <View style={styles.donutCenter}>
-                    <Text style={{ ...type.overline, textTransform: 'none', letterSpacing: 0, color: theme.text2 }}>
-                      vs. {formatMonth(previous).split(' de ')[0]}
-                    </Text>
-                    <Text
-                      style={{
-                        ...type.section,
-                        ...tabular,
-                        color: delta !== null && delta <= 0 ? theme.positive : theme.text,
-                      }}
-                    >
-                      {delta === null ? '—' : `${delta >= 0 ? '+' : '−'}${Math.abs(delta).toFixed(0)}%`}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={{ flex: 1, gap: 11, minWidth: 0 }}>
-                  {slices.map((slice) => (
-                    <View key={slice.key} style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-                      <View style={[styles.swatch, { backgroundColor: slice.color }]} />
-                      <Text style={{ ...type.body, color: theme.text, flex: 1 }} numberOfLines={1}>
-                        {slice.name}
-                      </Text>
-                      <Text style={{ ...type.body, ...tabular, fontWeight: '600', color: theme.text }}>
-                        {formatBRL(slice.cents)}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
+              <View style={{ marginTop: spacing.sm }}>
+                {rows.map((row, i) => (
+                  <CategoryRow
+                    key={row.categoryId}
+                    row={row}
+                    total={total}
+                    before={beforeById.get(row.categoryId)}
+                    hasBefore={!!byCategoryBefore.data}
+                    against={against}
+                    kind={kind}
+                    selected={focused?.categoryId === row.categoryId}
+                    onPress={() => setFocus(row.categoryId)}
+                    index={i}
+                    revealKey={`${month}:${kind}`}
+                  />
+                ))}
               </View>
             </Card>
-
-            {/* A tabela por categoria continua: a rosca dá a proporção, a lista
-                dá o número exato e a contagem. */}
-            <View style={{ gap: spacing.md }}>
-              <SectionLabel>Todas as categorias</SectionLabel>
-              {[...rows]
-                .sort((a, b) => b.totalCents - a.totalCents)
-                .map((row) => {
-                  const share = total > 0 ? row.totalCents / total : 0
-                  return (
-                    <View key={row.categoryId} style={{ gap: 6, paddingVertical: 2 }}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm }}>
-                        <Text style={{ ...type.row, color: theme.text, flex: 1 }} numberOfLines={1}>
-                          {row.categoryName}
-                        </Text>
-                        <Text style={{ ...type.row, ...tabular, color: theme.text }}>
-                          {formatBRL(row.totalCents)}
-                        </Text>
-                        <Text style={{ ...type.row, ...tabular, color: theme.text2, width: 44, textAlign: 'right' }}>
-                          {Math.round(share * 100)}%
-                        </Text>
-                      </View>
-                      <View style={[styles.track, { backgroundColor: theme.track }]}>
-                        <View
-                          style={{
-                            width: `${Math.max(share * 100, 1)}%`,
-                            height: '100%',
-                            backgroundColor: theme.accent,
-                          }}
-                        />
-                      </View>
-                      <Text style={{ ...type.caption, color: theme.text2 }}>
-                        {row.transactionCount} lançamento{row.transactionCount === 1 ? '' : 's'}
-                      </Text>
-                    </View>
-                  )
-                })}
-            </View>
-          </Gutter>
-        )}
+          )}
+        </Gutter>
       </ScrollView>
     </Screen>
   )
 }
 
-const styles = {
-  donutCenter: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  /** 9×9 com canto 3: o quadradinho da legenda, não um círculo. */
-  swatch: { width: 9, height: 9, borderRadius: 3, flexShrink: 0 },
-  track: { height: 8, borderRadius: radius.full, overflow: 'hidden' },
-} as const
+/* ───────────────────────────── animação ───────────────────────────── */
+
+/** Respeita o "reduzir movimento" do sistema: aí tudo aparece pronto. */
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false)
+  useEffect(() => {
+    let alive = true
+    AccessibilityInfo.isReduceMotionEnabled?.()
+      .then((value) => alive && setReduced(value))
+      .catch(() => {})
+    const sub = AccessibilityInfo.addEventListener?.('reduceMotionChanged', setReduced)
+    return () => {
+      alive = false
+      sub?.remove?.()
+    }
+  }, [])
+  return reduced
+}
+
+const easeOut = (t: number) => 1 - Math.pow(1 - t, 3)
+
+/**
+ * Progresso de 0 a 1 que recomeça a cada `key`. Os gráficos são SVG e o
+ * driver nativo do Animated não chega nos atributos deles, então o progresso
+ * vira estado, quadro a quadro, só no componente que anima.
+ */
+function useReveal(key: string, { duration = 760, delay = 0 } = {}): number {
+  const reduced = useReducedMotion()
+  const [progress, setProgress] = useState(0)
+  useEffect(() => {
+    if (reduced) {
+      setProgress(1)
+      return
+    }
+    let frame = 0
+    const start = Date.now() + delay
+    setProgress(0)
+    const tick = () => {
+      const t = Math.min(1, Math.max(0, (Date.now() - start) / duration))
+      setProgress(easeOut(t))
+      if (t < 1) frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [key, reduced, duration, delay])
+  return progress
+}
+
+/** Vai do valor anterior até o novo, em vez de saltar. */
+function useTween(target: number, duration = 620): number {
+  const reduced = useReducedMotion()
+  const [value, setValue] = useState(target)
+  const shown = useRef(target)
+  useEffect(() => {
+    if (reduced) {
+      shown.current = target
+      setValue(target)
+      return
+    }
+    const from = shown.current
+    const start = Date.now()
+    let frame = 0
+    const tick = () => {
+      const t = Math.min(1, (Date.now() - start) / duration)
+      const next = from + (target - from) * easeOut(t)
+      shown.current = next
+      setValue(next)
+      if (t < 1) frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [target, reduced, duration])
+  return value
+}
+
+/* ─────────────────────────────── topo ─────────────────────────────── */
+
+/** O total do mês, contando até o valor novo. */
+function CountUp({ cents }: { cents: number }) {
+  const theme = useTheme()
+  const value = useTween(cents)
+  return (
+    <Text
+      accessibilityLabel={formatBRL(cents)}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      style={[type.balance, tabular, { color: theme.text, marginTop: 4 }]}
+    >
+      {formatBRL(Math.round(value))}
+    </Text>
+  )
+}
+
+/**
+ * Pílula de variação. Gasto que caiu e entrada que subiu são boas notícias e
+ * ficam no verde; o contrário fica neutro: gasto maior não é erro (DS, 01).
+ */
+function DeltaPill({ delta, kind, against }: { delta: number; kind: Kind; against: string }) {
+  const theme = useTheme()
+  const good = kind === 'expense' ? delta < 0 : delta > 0
+  const flat = Math.abs(delta) < 0.5
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        height: 26,
+        paddingHorizontal: 10,
+        borderRadius: radius.full,
+        backgroundColor: flat ? theme.surface2 : good ? theme.positiveSoft : theme.surface2,
+      }}
+    >
+      <Ionicons
+        name={flat ? 'remove' : delta > 0 ? 'trending-up' : 'trending-down'}
+        size={14}
+        color={flat ? theme.text2 : good ? theme.positive : theme.text}
+      />
+      <Text
+        style={[
+          { ...type.caption, fontWeight: '600', color: flat ? theme.text2 : good ? theme.positive : theme.text },
+          tabular,
+        ]}
+      >
+        {flat ? 'igual a' : `${Math.abs(delta).toFixed(0)}% ${delta > 0 ? 'acima de' : 'abaixo de'}`} {against}
+      </Text>
+    </View>
+  )
+}
+
+/** Número pequeno embaixo do total, no mesmo desenho das Entradas/Saídas da Início. */
+function Figure({ label, value }: { label: string; value: string | null }) {
+  const theme = useTheme()
+  return (
+    <View style={{ gap: 3 }}>
+      <Text style={{ ...type.caption, color: theme.text2 }}>{label}</Text>
+      {value === null ? (
+        <Skeleton width={64} height={14} style={{ marginTop: 3 }} />
+      ) : (
+        <Text style={[{ fontSize: 16, fontWeight: '600', letterSpacing: -0.2, color: theme.text }, tabular]}>
+          {value}
+        </Text>
+      )}
+    </View>
+  )
+}
+
+/**
+ * Seletor de dois estados com a cápsula deslizando entre eles. A cápsula é
+ * uma camada só, que anda com o driver nativo; os rótulos ficam por cima.
+ */
+function Segmented<T extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: T
+  onChange: (value: T) => void
+  options: { value: T; label: string; icon: keyof typeof Ionicons.glyphMap }[]
+}) {
+  const theme = useTheme()
+  const [width, setWidth] = useState(0)
+  const index = Math.max(0, options.findIndex((o) => o.value === value))
+  const x = useRef(new Animated.Value(index)).current
+  useEffect(() => {
+    Animated.spring(x, { toValue: index, useNativeDriver: true, speed: 20, bounciness: 4 }).start()
+  }, [index, x])
+  const pad = 4
+  const item = width > 0 ? (width - pad * 2) / options.length : 0
+
+  return (
+    <View
+      accessibilityRole="tablist"
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+      style={{
+        flexDirection: 'row',
+        height: 44,
+        padding: pad,
+        borderRadius: radius.full,
+        backgroundColor: theme.surface2,
+      }}
+    >
+      {item > 0 ? (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: pad,
+            left: pad,
+            width: item,
+            bottom: pad,
+            borderRadius: radius.full,
+            backgroundColor: theme.surface,
+            borderWidth: 1,
+            borderColor: theme.border,
+            borderTopColor: theme.edgeTop,
+            transform: [{ translateX: x.interpolate({ inputRange: [0, 1], outputRange: [0, item] }) }],
+          }}
+        />
+      ) : null}
+      {options.map((option) => {
+        const active = option.value === value
+        return (
+          <Pressable
+            key={option.value}
+            onPress={() => onChange(option.value)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            aria-selected={active}
+            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+          >
+            <Ionicons
+              name={option.icon}
+              size={14}
+              color={active ? (option.value === 'income' ? theme.positive : theme.accentText) : theme.text3}
+            />
+            <Text style={{ ...type.body, fontWeight: '600', color: active ? theme.text : theme.text2 }}>
+              {option.label}
+            </Text>
+          </Pressable>
+        )
+      })}
+    </View>
+  )
+}
+
+/* ───────────────────────────── evolução ───────────────────────────── */
+
+const BARS_HEIGHT = 128
+const BAR_GAP = 5
+
+type TrendPoint = { month: string; cents: number; forecast: number }
+
+/** Média dos meses que já passaram e tiveram movimento. */
+function averageOf(trend: TrendPoint[], now: string): number {
+  const past = trend.filter((p) => p.month <= now && p.cents > 0)
+  return past.length ? past.reduce((s, p) => s + p.cents, 0) / past.length : 0
+}
+
+function TrendAverage({ trend, now }: { trend: TrendPoint[]; now: string }) {
+  const theme = useTheme()
+  const average = averageOf(trend, now)
+  if (!average) return null
+  return (
+    <Text style={{ ...type.caption, color: theme.text2 }}>
+      média <Text style={[{ fontWeight: '600', color: theme.text }, tabular]}>{roundBRL(average)}</Text>
+    </Text>
+  )
+}
+
+/** Retângulo com a ponta de cima arredondada. */
+function barPath(x: number, y: number, w: number, h: number, round = true): string {
+  if (h <= 0) return ''
+  const r = round ? Math.min(5, w / 2, h) : 0
+  return `M${x},${y + h} L${x},${y + r} Q${x},${y} ${x + r},${y} L${x + w - r},${y} Q${x + w},${y} ${x + w},${y + r} L${x + w},${y + h} Z`
+}
+
+/**
+ * Barras dos 12 meses. O mês escolhido fica no destaque e os outros no tom
+ * da rampa; no mês corrente, o previsto empilha por cima, mais claro. Tocar
+ * numa barra leva a tela inteira para aquele mês.
+ */
+function TrendChart({
+  trend,
+  selected,
+  now,
+  loading,
+  onPick,
+}: {
+  trend: TrendPoint[]
+  selected: string
+  now: string
+  loading: boolean
+  onPick: (month: string) => void
+}) {
+  const theme = useTheme()
+  const [width, setWidth] = useState(0)
+  const grow = useReveal(`${trend[0]?.month}:${loading}:${trend.map((p) => p.cents).join(',')}`, { duration: 820 })
+  const max = Math.max(1, ...trend.map((p) => p.cents + p.forecast))
+  const average = averageOf(trend, now)
+  const barW = width > 0 ? (width - BAR_GAP * (trend.length - 1)) / trend.length : 0
+  const scale = (cents: number) => (cents / max) * (BARS_HEIGHT - 8)
+  const avgY = BARS_HEIGHT - scale(average)
+
+  return (
+    <View style={{ marginTop: spacing.lg }}>
+      <View style={{ height: BARS_HEIGHT }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+        {width > 0 ? (
+          <Svg width={width} height={BARS_HEIGHT}>
+            {trend.map((p, i) => {
+              const x = i * (barW + BAR_GAP)
+              const isSelected = p.month === selected
+              // Cada barra cresce um tico depois da vizinha: a onda vai da
+              // esquerda para a direita.
+              const local = Math.min(1, Math.max(0, grow * 1.6 - (i / trend.length) * 0.6))
+              const h = loading ? BARS_HEIGHT * 0.25 : scale(p.cents) * local
+              const fh = loading ? 0 : scale(p.forecast) * local
+              const fill = loading ? theme.skeleton : isSelected ? theme.accent : theme.chartRamp[2]
+              return (
+                <G key={p.month}>
+                  {/* Trilho do mês vazio: sem ele, a falta de barra parece falha. */}
+                  <Path d={barPath(x, BARS_HEIGHT - 3, barW, 3, false)} fill={theme.track} />
+                  {fh > 0 ? (
+                    <Path
+                      d={barPath(x, BARS_HEIGHT - h - fh, barW, fh)}
+                      fill={isSelected ? theme.accent : theme.chartRamp[2]}
+                      opacity={0.32}
+                    />
+                  ) : null}
+                  <Path d={barPath(x, BARS_HEIGHT - h, barW, h, fh <= 0)} fill={fill} />
+                </G>
+              )
+            })}
+            {average > 0 && !loading ? (
+              <Line
+                x1={0}
+                x2={width}
+                y1={avgY}
+                y2={avgY}
+                stroke={theme.text3}
+                strokeWidth={1}
+                strokeDasharray="3 4"
+                opacity={grow}
+              />
+            ) : null}
+          </Svg>
+        ) : null}
+
+        {/* Faixas de toque por cima das barras, uma por mês. */}
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row', gap: BAR_GAP }}>
+          {trend.map((p) => (
+            <Pressable
+              key={p.month}
+              onPress={() => onPick(p.month)}
+              accessibilityRole="button"
+              accessibilityLabel={`${formatMonth(p.month)}: ${formatBRL(p.cents)}`}
+              style={{ flex: 1 }}
+            />
+          ))}
+        </View>
+      </View>
+
+      <View style={{ flexDirection: 'row', gap: BAR_GAP, marginTop: 8 }}>
+        {trend.map((p) => {
+          const isSelected = p.month === selected
+          return (
+            <Text
+              key={p.month}
+              numberOfLines={1}
+              style={{
+                flex: 1,
+                textAlign: 'center',
+                fontSize: 10.5,
+                letterSpacing: -0.1,
+                fontWeight: isSelected ? '700' : '500',
+                color: isSelected ? theme.accentText : p.month === now ? theme.text : theme.text3,
+              }}
+            >
+              {shortMonth(p.month)}
+            </Text>
+          )
+        })}
+      </View>
+    </View>
+  )
+}
+
+/* ────────────────────────────── rosca ─────────────────────────────── */
+
+const DONUT = 200
+const RADIUS = 80
+const STROKE = 20
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS
+/** O respiro entre fatias. */
+const GAP = 3
+/** Fatias nomeadas na rosca; o resto vira uma só, 'Outras'. */
+const NAMED = 5
+
+type Row = {
+  categoryId: string
+  categoryName: string
+  categoryColor: string
+  categoryIcon: string | null
+  totalCents: number
+  transactionCount: number
+}
+
+/**
+ * A rosca do mês. Fica toda no tom neutro e só a categoria em foco acende no
+ * destaque, mais grossa: uma cor só, como pede o DS (decisão 05), e o olho
+ * vai direto para a fatia de que se está falando.
+ */
+function Donut({
+  rows,
+  total,
+  focused,
+  revealKey,
+}: {
+  rows: Row[]
+  total: number
+  focused: Row | null
+  revealKey: string
+}) {
+  const theme = useTheme()
+  const sweep = useReveal(revealKey, { duration: 900 })
+
+  const slices = useMemo(() => {
+    const named = rows.slice(0, NAMED).map((r) => ({ key: r.categoryId, ids: [r.categoryId], cents: r.totalCents }))
+    const rest = rows.slice(NAMED)
+    if (rest.length) {
+      named.push({
+        key: 'outras',
+        ids: rest.map((r) => r.categoryId),
+        cents: rest.reduce((s, r) => s + r.totalCents, 0),
+      })
+    }
+    return named
+  }, [rows])
+
+  const share = focused && total > 0 ? focused.totalCents / total : 0
+  const shownShare = useTween(share * 100, 420)
+  const drawn = CIRCUMFERENCE * sweep
+  const c = DONUT / 2
+
+  let offset = 0
+  return (
+    <View style={{ alignItems: 'center', marginTop: spacing.lg }}>
+      <View style={{ width: DONUT, height: DONUT }}>
+        <Svg width={DONUT} height={DONUT}>
+          {/* -90° põe a primeira fatia no topo. O pivô vai dentro do próprio
+              `rotate()`: o prop `rotation` do react-native-svg vira, na web,
+              um `transform-origin` que o React DOM recusa. */}
+          <G transform={`rotate(-90 ${c} ${c})`}>
+            <Circle cx={c} cy={c} r={RADIUS} fill="none" stroke={theme.track} strokeWidth={STROKE} />
+            {slices.map((slice, i) => {
+              const length = (slice.cents / total) * CIRCUMFERENCE
+              const start = offset
+              offset += length
+              // Só a parte da fatia que a varredura já alcançou.
+              const visible = Math.max(0, Math.min(length, drawn - start))
+              const active = !!focused && slice.ids.includes(focused.categoryId)
+              const gap = slices.length > 1 ? GAP : 0
+              if (visible <= gap) return null
+              return (
+                <Circle
+                  key={slice.key}
+                  cx={c}
+                  cy={c}
+                  r={RADIUS}
+                  fill="none"
+                  stroke={active ? theme.accent : theme.chartRamp[i % 2 === 0 ? 2 : 1]}
+                  strokeWidth={active ? STROKE + 8 : STROKE}
+                  strokeLinecap="butt"
+                  strokeDasharray={`${visible - gap} ${CIRCUMFERENCE}`}
+                  strokeDashoffset={-start}
+                />
+              )
+            })}
+          </G>
+        </Svg>
+
+        {/* O centro diz de que fatia se está falando. */}
+        <View
+          pointerEvents="none"
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 }}
+        >
+          {focused ? (
+            <>
+              <CategoryIcon icon={focused.categoryIcon} color={focused.categoryColor} size={30} />
+              <Text style={{ ...type.caption, color: theme.text2, marginTop: 6 }} numberOfLines={1}>
+                {focused.categoryName}
+              </Text>
+              <Text style={[{ fontSize: 26, fontWeight: '700', letterSpacing: -0.8, color: theme.text }, tabular]}>
+                {Math.round(shownShare)}%
+              </Text>
+              <Text style={[{ ...type.caption, fontWeight: '600', color: theme.text2 }, tabular]} numberOfLines={1}>
+                {formatBRL(focused.totalCents)}
+              </Text>
+            </>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  )
+}
+
+/* ──────────────────────────── categorias ──────────────────────────── */
+
+function CategoryRow({
+  row,
+  total,
+  before,
+  hasBefore,
+  against,
+  kind,
+  selected,
+  onPress,
+  index,
+  revealKey,
+}: {
+  row: Row
+  total: number
+  before: number | undefined
+  hasBefore: boolean
+  against: string
+  kind: Kind
+  selected: boolean
+  onPress: () => void
+  index: number
+  revealKey: string
+}) {
+  const theme = useTheme()
+  // As barras enchem em cascata, uma linha depois da outra.
+  const fill = useReveal(revealKey, { duration: 700, delay: 120 + Math.min(index, 8) * 45 })
+  const share = total > 0 ? row.totalCents / total : 0
+  const change = before !== undefined ? percentDelta(row.totalCents, before) : null
+  const good = change !== null && (kind === 'expense' ? change < 0 : change > 0)
+
+  let trend: { text: string; color: string } | null = null
+  if (hasBefore && before === undefined) trend = { text: `novo vs ${against}`, color: theme.text2 }
+  else if (change !== null && Math.abs(change) >= 1) {
+    trend = {
+      text: `${change > 0 ? '↑' : '↓'} ${Math.abs(change).toFixed(0)}% vs ${against}`,
+      color: good ? theme.positive : theme.text2,
+    }
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`${row.categoryName}, ${formatBRL(row.totalCents)}, ${Math.round(share * 100)}%`}
+      style={({ pressed }) => ({
+        marginHorizontal: spacing.sm,
+        paddingHorizontal: 10,
+        paddingVertical: 10,
+        borderRadius: radius.lg,
+        backgroundColor: selected ? theme.accentSoft : pressed ? theme.surface2 : 'transparent',
+      })}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+        <CategoryIcon icon={row.categoryIcon} color={row.categoryColor} size={38} />
+        <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm }}>
+            <Text style={{ ...type.row, color: theme.text, flex: 1 }} numberOfLines={1}>
+              {row.categoryName}
+            </Text>
+            <Text style={[{ ...type.amount, color: theme.text }, tabular]}>{formatBRL(row.totalCents)}</Text>
+          </View>
+          <View style={{ height: 5, borderRadius: radius.full, backgroundColor: theme.track, overflow: 'hidden' }}>
+            <View
+              style={{
+                width: `${Math.max(share * 100 * fill, share > 0 ? 1.5 : 0)}%`,
+                height: '100%',
+                borderRadius: radius.full,
+                backgroundColor: selected ? theme.accent : theme.chartRamp[1],
+              }}
+            />
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            <Text style={{ ...type.caption, color: theme.text2, flex: 1 }} numberOfLines={1}>
+              {row.transactionCount} lançamento{row.transactionCount === 1 ? '' : 's'}
+              {trend ? <Text style={{ color: trend.color }}> · {trend.text}</Text> : null}
+            </Text>
+            <Text style={[{ ...type.caption, fontWeight: '600', color: theme.text2 }, tabular]}>
+              {Math.round(share * 100)}%
+            </Text>
+          </View>
+        </View>
+      </View>
+    </Pressable>
+  )
+}
+
+/* ──────────────────────────── destaques ───────────────────────────── */
+
+type Insight = {
+  key: string
+  icon: keyof typeof Ionicons.glyphMap
+  tone: 'accent' | 'positive' | 'neutral'
+  title: string
+  detail: string
+}
+
+/**
+ * Frases curtas tiradas dos próprios números: o que mais pesou, o que mais
+ * mudou e onde o mês deve fechar. Só entra o que tiver dado para sustentar.
+ */
+function buildInsights({
+  rows,
+  beforeById,
+  total,
+  kind,
+  month,
+  now,
+  forecast,
+  against,
+}: {
+  rows: Row[]
+  beforeById: Map<string, number>
+  total: number
+  kind: Kind
+  month: string
+  now: string
+  forecast: number
+  /** 'outubro', ou '1 a 11 de outubro' no mês corrente. */
+  against: string
+}): Insight[] {
+  if (total <= 0) return []
+  const out: Insight[] = []
+
+  if (month === now && forecast > 0) {
+    out.push({
+      key: 'fecha',
+      icon: 'flag-outline',
+      tone: 'accent',
+      title: `${kind === 'expense' ? 'O mês deve fechar' : 'As entradas devem chegar'} em ${roundBRL(total + forecast)}`,
+      detail: `${roundBRL(total)} até agora e ${roundBRL(forecast)} ${kind === 'expense' ? 'em contas previstas' : 'previstos'}.`,
+    })
+  }
+
+  const top = rows[0]
+  if (top) {
+    const share = Math.round((top.totalCents / total) * 100)
+    out.push({
+      key: 'maior',
+      icon: 'podium-outline',
+      tone: 'neutral',
+      title: `${top.categoryName} ${kind === 'expense' ? 'levou' : 'trouxe'} ${share}% do mês`,
+      detail:
+        rows.length > 3
+          ? `As 3 maiores categorias somam ${Math.round(
+              (rows.slice(0, 3).reduce((s, r) => s + r.totalCents, 0) / total) * 100,
+            )}% ${kind === 'expense' ? 'dos gastos' : 'das entradas'}.`
+          : `${roundBRL(top.totalCents)} em ${top.transactionCount} lançamento${top.transactionCount === 1 ? '' : 's'}.`,
+    })
+  }
+
+  if (beforeById.size) {
+    const moves = rows
+      .map((r) => ({ row: r, diff: r.totalCents - (beforeById.get(r.categoryId) ?? 0) }))
+      // Mudança de menos de R$ 20 não vale uma frase.
+      .filter((m) => Math.abs(m.diff) >= 2000)
+    const up = [...moves].sort((a, b) => b.diff - a.diff)[0]
+    const down = [...moves].sort((a, b) => a.diff - b.diff)[0]
+    if (up && up.diff > 0) {
+      out.push({
+        key: 'subiu',
+        icon: 'trending-up',
+        tone: kind === 'income' ? 'positive' : 'neutral',
+        title: `${up.row.categoryName} subiu ${roundBRL(up.diff)}`,
+        detail: `Em relação a ${against}.`,
+      })
+    }
+    if (down && down.diff < 0) {
+      out.push({
+        key: 'caiu',
+        icon: 'trending-down',
+        tone: kind === 'expense' ? 'positive' : 'neutral',
+        title: `${down.row.categoryName} caiu ${roundBRL(-down.diff)}`,
+        detail: `Em relação a ${against}.`,
+      })
+    }
+  }
+
+  return out.slice(0, 3)
+}
+
+function InsightRow({ insight, index }: { insight: Insight; index: number }) {
+  const theme = useTheme()
+  // Entram em cascata, subindo um pouco: dá a sensação de que a tela "leu" o mês.
+  const rise = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    rise.setValue(0)
+    Animated.timing(rise, {
+      toValue: 1,
+      duration: 420,
+      delay: 80 + index * 70,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start()
+  }, [insight.title, index, rise])
+
+  const tint =
+    insight.tone === 'positive' ? theme.positive : insight.tone === 'accent' ? theme.accentText : theme.text2
+  const soft =
+    insight.tone === 'positive' ? theme.positiveSoft : insight.tone === 'accent' ? theme.accentSoft : theme.surface2
+
+  return (
+    <Animated.View
+      style={{
+        opacity: rise,
+        transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.md,
+        padding: 14,
+        borderRadius: radius.lg + 2,
+        borderWidth: 1,
+        borderColor: theme.border,
+        borderTopColor: theme.edgeTop,
+        backgroundColor: theme.surface,
+      }}
+    >
+      <View
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: radius.sm,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: soft,
+        }}
+      >
+        <Ionicons name={insight.icon} size={18} color={tint} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text style={{ ...type.row, fontWeight: '600', color: theme.text }}>{capitalize(insight.title)}</Text>
+        <Text style={{ ...type.caption, color: theme.text2 }}>{insight.detail}</Text>
+      </View>
+    </Animated.View>
+  )
+}
