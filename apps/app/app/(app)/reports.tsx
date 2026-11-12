@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  AccessibilityInfo,
   Animated,
   Easing,
   PanResponder,
@@ -26,6 +25,7 @@ import {
   mask,
   useTabBarSpace,
 } from '@/components/ui'
+import { CountUp, Figure, Segmented } from '@/components/metrics'
 import { MonthStrip } from '@/components/month-strip'
 import { client, unwrap } from '@/lib/api'
 import {
@@ -39,6 +39,7 @@ import {
   relativeDay,
   today,
 } from '@/lib/format'
+import { useReveal, useTween } from '@/lib/motion'
 import { useHidden } from '@/lib/privacy'
 import { radius, spacing, tabular, type, useTheme } from '@/lib/theme'
 
@@ -295,7 +296,7 @@ export default function Reports() {
             onChange={setKind}
             options={[
               { value: 'expense', label: 'Gastos', icon: 'arrow-down' },
-              { value: 'income', label: 'Entradas', icon: 'arrow-up' },
+              { value: 'income', label: 'Entradas', icon: 'arrow-up', tint: theme.positive },
             ]}
           />
 
@@ -462,98 +463,7 @@ export default function Reports() {
   )
 }
 
-/* ───────────────────────────── animação ───────────────────────────── */
-
-/** Respeita o "reduzir movimento" do sistema: aí tudo aparece pronto. */
-function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false)
-  useEffect(() => {
-    let alive = true
-    AccessibilityInfo.isReduceMotionEnabled?.()
-      .then((value) => alive && setReduced(value))
-      .catch(() => {})
-    const sub = AccessibilityInfo.addEventListener?.('reduceMotionChanged', setReduced)
-    return () => {
-      alive = false
-      sub?.remove?.()
-    }
-  }, [])
-  return reduced
-}
-
-const easeOut = (t: number) => 1 - Math.pow(1 - t, 3)
-
-/**
- * Progresso de 0 a 1 que recomeça a cada `key`. Os gráficos são SVG e o
- * driver nativo do Animated não chega nos atributos deles, então o progresso
- * vira estado, quadro a quadro, só no componente que anima.
- */
-function useReveal(key: string, { duration = 760, delay = 0 } = {}): number {
-  const reduced = useReducedMotion()
-  const [progress, setProgress] = useState(0)
-  useEffect(() => {
-    if (reduced) {
-      setProgress(1)
-      return
-    }
-    let frame = 0
-    const start = Date.now() + delay
-    setProgress(0)
-    const tick = () => {
-      const t = Math.min(1, Math.max(0, (Date.now() - start) / duration))
-      setProgress(easeOut(t))
-      if (t < 1) frame = requestAnimationFrame(tick)
-    }
-    frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
-  }, [key, reduced, duration, delay])
-  return progress
-}
-
-/** Vai do valor anterior até o novo, em vez de saltar. */
-function useTween(target: number, duration = 620): number {
-  const reduced = useReducedMotion()
-  const [value, setValue] = useState(target)
-  const shown = useRef(target)
-  useEffect(() => {
-    if (reduced) {
-      shown.current = target
-      setValue(target)
-      return
-    }
-    const from = shown.current
-    const start = Date.now()
-    let frame = 0
-    const tick = () => {
-      const t = Math.min(1, (Date.now() - start) / duration)
-      const next = from + (target - from) * easeOut(t)
-      shown.current = next
-      setValue(next)
-      if (t < 1) frame = requestAnimationFrame(tick)
-    }
-    frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
-  }, [target, reduced, duration])
-  return value
-}
-
 /* ─────────────────────────────── topo ─────────────────────────────── */
-
-/** O total do mês, contando até o valor novo. */
-function CountUp({ cents, hidden }: { cents: number; hidden: boolean }) {
-  const theme = useTheme()
-  const value = useTween(cents)
-  return (
-    <Text
-      accessibilityLabel={hidden ? 'Valor oculto' : formatBRL(cents)}
-      numberOfLines={1}
-      adjustsFontSizeToFit
-      style={[type.balance, tabular, { color: theme.text, marginTop: 4 }]}
-    >
-      {mask(formatBRL(Math.round(value)), hidden)}
-    </Text>
-  )
-}
 
 /**
  * Pílula de variação. Gasto que caiu e entrada que subiu são boas notícias e
@@ -588,102 +498,6 @@ function DeltaPill({ delta, kind, against }: { delta: number; kind: Kind; agains
       >
         {flat ? 'igual a' : `${Math.abs(delta).toFixed(0)}% ${delta > 0 ? 'acima de' : 'abaixo de'}`} {against}
       </Text>
-    </View>
-  )
-}
-
-/** Número pequeno embaixo do total, no mesmo desenho das Entradas/Saídas da Início. */
-function Figure({ label, value }: { label: string; value: string | null }) {
-  const theme = useTheme()
-  return (
-    <View style={{ gap: 3 }}>
-      <Text style={{ ...type.caption, color: theme.text2 }}>{label}</Text>
-      {value === null ? (
-        <Skeleton width={64} height={14} style={{ marginTop: 3 }} />
-      ) : (
-        <Text style={[{ fontSize: 16, fontWeight: '600', letterSpacing: -0.2, color: theme.text }, tabular]}>
-          {value}
-        </Text>
-      )}
-    </View>
-  )
-}
-
-/**
- * Seletor de dois estados com a cápsula deslizando entre eles. A cápsula é
- * uma camada só, que anda com o driver nativo; os rótulos ficam por cima.
- */
-function Segmented<T extends string>({
-  value,
-  onChange,
-  options,
-}: {
-  value: T
-  onChange: (value: T) => void
-  options: { value: T; label: string; icon: keyof typeof Ionicons.glyphMap }[]
-}) {
-  const theme = useTheme()
-  const [width, setWidth] = useState(0)
-  const index = Math.max(0, options.findIndex((o) => o.value === value))
-  const x = useRef(new Animated.Value(index)).current
-  useEffect(() => {
-    Animated.spring(x, { toValue: index, useNativeDriver: true, speed: 20, bounciness: 4 }).start()
-  }, [index, x])
-  const pad = 4
-  const item = width > 0 ? (width - pad * 2) / options.length : 0
-
-  return (
-    <View
-      accessibilityRole="tablist"
-      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-      style={{
-        flexDirection: 'row',
-        height: 44,
-        padding: pad,
-        borderRadius: radius.full,
-        backgroundColor: theme.surface2,
-      }}
-    >
-      {item > 0 ? (
-        <Animated.View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: pad,
-            left: pad,
-            width: item,
-            bottom: pad,
-            borderRadius: radius.full,
-            backgroundColor: theme.surface,
-            borderWidth: 1,
-            borderColor: theme.border,
-            borderTopColor: theme.edgeTop,
-            transform: [{ translateX: x.interpolate({ inputRange: [0, 1], outputRange: [0, item] }) }],
-          }}
-        />
-      ) : null}
-      {options.map((option) => {
-        const active = option.value === value
-        return (
-          <Pressable
-            key={option.value}
-            onPress={() => onChange(option.value)}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: active }}
-            aria-selected={active}
-            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-          >
-            <Ionicons
-              name={option.icon}
-              size={14}
-              color={active ? (option.value === 'income' ? theme.positive : theme.accentText) : theme.text3}
-            />
-            <Text style={{ ...type.body, fontWeight: '600', color: active ? theme.text : theme.text2 }}>
-              {option.label}
-            </Text>
-          </Pressable>
-        )
-      })}
     </View>
   )
 }
