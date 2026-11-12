@@ -17,7 +17,7 @@ import {
   Screen,
   SectionLabel,
   TrustNote,
-  privacyBlur,
+  mask,
   useTabBarSpace,
   CategoryIcon,
 } from '@/components/ui'
@@ -222,10 +222,9 @@ export default function Home() {
                     type.balance,
                     tabular,
                     { color: theme.text, marginTop: 6 },
-                    privacyBlur(hidden, theme.text),
                   ]}
                 >
-                  {formatBRL(balance)}
+                  {mask(formatBRL(balance), hidden)}
                 </Text>
               ) : (
                 <Skeleton width={230} height={38} style={{ marginTop: 8, borderRadius: 10 }} />
@@ -272,7 +271,7 @@ export default function Home() {
                   {forecastIncome > 0 ? (
                     <>
                       {' '}+{' '}
-                      <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{formatBRL(forecastIncome)}</Text> de
+                      <Text style={tabular}>{mask(formatBRL(forecastIncome), hidden)}</Text> de
                       salário
                     </>
                   ) : null}
@@ -280,7 +279,7 @@ export default function Home() {
                   {forecastExpense > 0 ? (
                     <>
                       {' '}−{' '}
-                      <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{formatBRL(forecastExpense)}</Text> de
+                      <Text style={tabular}>{mask(formatBRL(forecastExpense), hidden)}</Text> de
                       contas fixas
                     </>
                   ) : null}
@@ -322,17 +321,16 @@ export default function Home() {
                         style={[
                           { fontSize: 19, fontWeight: '600', color: inkCard.text },
                           tabular,
-                          privacyBlur(hidden, inkCard.text),
                         ]}
                       >
-                        + {formatBRL(summary.data.incomeCents + forecastIncome)}
+                        + {mask(formatBRL(summary.data.incomeCents + forecastIncome), hidden)}
                       </Text>
                     ) : (
                       <Skeleton width="70%" height={16} />
                     )}
                     {forecastIncome > 0 ? (
                       <Text style={{ ...type.caption, color: inkCard.textSoft }}>
-                        <Text style={[tabular, privacyBlur(hidden, inkCard.textSoft)]}>{formatBRL(forecastIncome)}</Text>{' '}
+                        <Text style={tabular}>{mask(formatBRL(forecastIncome), hidden)}</Text>{' '}
                         previsto
                       </Text>
                     ) : null}
@@ -344,17 +342,16 @@ export default function Home() {
                         style={[
                           { fontSize: 19, fontWeight: '600', color: inkCard.text },
                           tabular,
-                          privacyBlur(hidden, inkCard.text),
                         ]}
                       >
-                        − {formatBRL(summary.data.expenseCents + forecastExpense)}
+                        − {mask(formatBRL(summary.data.expenseCents + forecastExpense), hidden)}
                       </Text>
                     ) : (
                       <Skeleton width="70%" height={16} delay={100} />
                     )}
                     {forecastExpense > 0 ? (
                       <Text style={{ ...type.caption, color: inkCard.textSoft }}>
-                        <Text style={[tabular, privacyBlur(hidden, inkCard.textSoft)]}>{formatBRL(forecastExpense)}</Text>{' '}
+                        <Text style={tabular}>{mask(formatBRL(forecastExpense), hidden)}</Text>{' '}
                         previsto
                       </Text>
                     ) : null}
@@ -408,10 +405,9 @@ export default function Home() {
                         style={[
                           { ...type.row, fontWeight: '600', color: theme.text },
                           tabular,
-                          privacyBlur(hidden, theme.text),
                         ]}
                       >
-                        {formatBRL(card.billAmountCents)}
+                        {mask(formatBRL(card.billAmountCents), hidden)}
                       </Text>
                     </View>
                   ))}

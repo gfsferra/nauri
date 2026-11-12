@@ -15,7 +15,7 @@ import {
   Skeleton,
   Title,
   TrustNote,
-  privacyBlur,
+  mask,
   useTabBarSpace,
 } from '@/components/ui'
 import { client, unwrap } from '@/lib/api'
@@ -152,9 +152,9 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
         <Text style={{ ...type.body, color: theme.text2, letterSpacing: 0.2 }}>Total investido</Text>
         <Text
           accessibilityLabel={hidden ? 'Valor oculto' : `Total investido de ${formatBRL(portfolio.totalCents)}`}
-          style={[type.balance, tabular, { color: theme.text, marginTop: 6 }, privacyBlur(hidden, theme.text)]}
+          style={[type.balance, tabular, { color: theme.text, marginTop: 6 }]}
         >
-          {formatBRL(portfolio.totalCents)}
+          {mask(formatBRL(portfolio.totalCents), hidden)}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
           {portfolio.costCents > 0 ? (
@@ -178,11 +178,10 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
                 style={[
                   { ...type.caption, ...tabular, fontWeight: '600' },
                   { color: portfolio.profitCents >= 0 ? theme.positive : theme.text2 },
-                  privacyBlur(hidden, portfolio.profitCents >= 0 ? theme.positive : theme.text2),
                 ]}
               >
-                {signed(portfolio.profitCents)}
-                {portfolio.profitPercent !== null ? ` · ${percentText(portfolio.profitPercent)}` : ''}
+                {mask(signed(portfolio.profitCents), hidden)}
+                {mask(portfolio.profitPercent !== null ? ` · ${percentText(portfolio.profitPercent)}` : '', hidden)}
               </Text>
             </View>
           ) : null}
@@ -190,7 +189,7 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
         </View>
         <Text style={{ ...type.caption, color: theme.text2, marginTop: 8 }}>
           Valor de resgate hoje, já sem IR e IOF ·{' '}
-          <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{formatBRL(portfolio.grossCents)}</Text> bruto
+          <Text style={tabular}>{mask(formatBRL(portfolio.grossCents), hidden)}</Text> bruto
           {portfolio.unknownCostCount > 0
             ? ` · ${portfolio.unknownCostCount} ${portfolio.unknownCostCount === 1 ? 'posição' : 'posições'} sem custo de compra no histórico, fora do rendimento`
             : ''}
@@ -210,7 +209,7 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
             ) : (
               <>
                 dos seus gastos, de{' '}
-                <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{formatBRL(savings.avgExpenseCents)}</Text>{' '}
+                <Text style={tabular}>{mask(formatBRL(savings.avgExpenseCents), hidden)}</Text>{' '}
                 por mês
               </>
             )}
@@ -258,10 +257,9 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
             style={[
               { fontSize: 28, fontWeight: '700', letterSpacing: -0.8, color: inkCard.text, marginTop: spacing.sm },
               tabular,
-              privacyBlur(hidden, inkCard.text),
             ]}
           >
-            {formatBRL(netWorth.totalCents)}
+            {mask(formatBRL(netWorth.totalCents), hidden)}
           </Text>
           <View style={{ gap: 8, marginTop: spacing.lg }}>
             {netWorth.accounts.map((a) => (
@@ -287,8 +285,8 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
                   <Text style={{ ...type.row, color: theme.text, flex: 1 }} numberOfLines={1}>
                     {g.label}
                   </Text>
-                  <Text style={[{ ...type.row, ...tabular, color: theme.text }, privacyBlur(hidden, theme.text)]}>
-                    {formatBRL(g.totalCents)}
+                  <Text style={[{ ...type.row, ...tabular, color: theme.text }]}>
+                    {mask(formatBRL(g.totalCents), hidden)}
                   </Text>
                   <Text style={{ ...type.row, ...tabular, color: theme.text2, width: 44, textAlign: 'right' }}>
                     {Math.round(share * 100)}%
@@ -345,7 +343,7 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
                     {d.savingsCents !== null && d.savingsCents >= 100 ? (
                       <>
                         {' · esperar poupa cerca de '}
-                        <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{formatBRL(d.savingsCents)}</Text>
+                        <Text style={tabular}>{mask(formatBRL(d.savingsCents), hidden)}</Text>
                       </>
                     ) : null}
                   </Text>
@@ -413,19 +411,18 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 2 }}>
                   <Text
-                    style={[{ ...type.amount, color: theme.text }, tabular, privacyBlur(hidden, theme.text)]}
+                    style={[{ ...type.amount, color: theme.text }, tabular]}
                   >
-                    {formatBRL(p.balanceCents)}
+                    {mask(formatBRL(p.balanceCents), hidden)}
                   </Text>
                   {p.profitCents !== null ? (
                     <Text
                       style={[
                         { ...type.caption, ...tabular, fontWeight: '600' },
                         { color: p.profitCents >= 0 ? theme.positive : theme.text2 },
-                        privacyBlur(hidden, p.profitCents >= 0 ? theme.positive : theme.text2),
                       ]}
                     >
-                      {signed(p.profitCents)}
+                      {mask(signed(p.profitCents), hidden)}
                     </Text>
                   ) : null}
                 </View>
@@ -451,8 +448,8 @@ function InkLine({ label, value, hidden }: { label: string; value: string; hidde
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md }}>
       <Text style={{ ...type.body, color: inkCard.textSoft }}>{label}</Text>
-      <Text style={[{ ...type.body, fontWeight: '600', color: inkCard.text }, tabular, privacyBlur(hidden, inkCard.text)]}>
-        {value}
+      <Text style={[{ ...type.body, fontWeight: '600', color: inkCard.text }, tabular]}>
+        {mask(value, hidden)}
       </Text>
     </View>
   )
@@ -484,10 +481,9 @@ function MonthYield({
             { fontSize: 24, fontWeight: '700', letterSpacing: -0.6 },
             tabular,
             { color: up ? theme.positive : theme.text },
-            privacyBlur(hidden, up ? theme.positive : theme.text),
           ]}
         >
-          {signed(current.yieldCents)}
+          {mask(signed(current.yieldCents), hidden)}
         </Text>
         {current.percent !== null ? (
           <Text style={[{ ...type.body, fontWeight: '600', color: up ? theme.positive : theme.text2 }, tabular]}>
@@ -504,7 +500,7 @@ function MonthYield({
             {' · '}
             {monthName(previous.month)}
             {previous.partial ? ` (desde ${previous.fromDay.slice(8, 10)}/${previous.fromDay.slice(5, 7)})` : ''}:{' '}
-            <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{signed(previous.yieldCents)}</Text>
+            <Text style={tabular}>{mask(signed(previous.yieldCents), hidden)}</Text>
           </>
         ) : null}
       </Text>
@@ -592,8 +588,8 @@ function EvolutionChart({ history, hidden }: { history: Ready['history']; hidden
         <>
           <Text style={{ ...type.caption, color: theme.text2, marginTop: 2 }}>
             {current ? formatDate(current.day) : ''} ·{' '}
-            <Text style={[{ fontWeight: '600', color: theme.text }, tabular, privacyBlur(hidden, theme.text)]}>
-              {current ? formatBRL(current.investmentsCents) : ''}
+            <Text style={[{ fontWeight: '600', color: theme.text }, tabular]}>
+              {mask(current ? formatBRL(current.investmentsCents) : '', hidden)}
             </Text>
           </Text>
           <View
@@ -691,16 +687,15 @@ function SavedChart({
               { fontSize: 24, fontWeight: '700', letterSpacing: -0.6, marginTop: 4 },
               tabular,
               { color: selected.savedCents > 0 ? theme.positive : theme.text },
-              privacyBlur(hidden, selected.savedCents > 0 ? theme.positive : theme.text),
             ]}
           >
-            {selected.savedCents === 0 ? formatBRL(0) : signed(selected.savedCents)}
+            {mask(selected.savedCents === 0 ? formatBRL(0) : signed(selected.savedCents), hidden)}
           </Text>
           <Text style={{ ...type.caption, color: theme.text2, marginTop: 2 }}>
             Aportes{' '}
-            <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{formatBRL(selected.contributionsCents)}</Text> ·
+            <Text style={tabular}>{mask(formatBRL(selected.contributionsCents), hidden)}</Text> ·
             resgates{' '}
-            <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{formatBRL(selected.withdrawalsCents)}</Text>
+            <Text style={tabular}>{mask(formatBRL(selected.withdrawalsCents), hidden)}</Text>
             {selectedRate !== null ? ` · ${rateText(selectedRate)} do que entrou` : ''}
           </Text>
         </>
