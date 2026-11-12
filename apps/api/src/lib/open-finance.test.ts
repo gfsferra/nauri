@@ -1,6 +1,7 @@
 import {
   amountToCents,
   bankCodeOf,
+  bankIconOf,
   budgetOnOf,
   bankLabelOf,
   categoryFor,
@@ -417,5 +418,17 @@ describe('budgetOnOf: mês do orçamento das compras no cartão', () => {
     expect(card.ok && card.value.budgetOn).toBe('2026-11-01')
     const bank = mapPluggyTransaction({ ...parcela, amount: -10 }, 'BANK', TODAY)
     expect(bank.ok && bank.value.budgetOn).toBeNull()
+  })
+})
+
+describe('bankIconOf', () => {
+  it('logo dos bancos conhecidos, pela CDN da Pluggy', () => {
+    expect(bankIconOf('Nubank')).toBe('https://cdn.pluggy.ai/assets/connector-icons/212.svg')
+    expect(bankIconOf('Itaú')).toBe('https://cdn.pluggy.ai/assets/connector-icons/201.svg')
+  })
+  it('banco desconhecido ou vazio fica sem logo', () => {
+    expect(bankIconOf('Banco Inter')).toBeNull()
+    expect(bankIconOf(null)).toBeNull()
+    expect(bankIconOf('')).toBeNull()
   })
 })

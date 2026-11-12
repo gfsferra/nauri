@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons'
-import { type ReactNode, useEffect, useRef, useSyncExternalStore } from 'react'
+import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import {
   Animated,
+  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -545,6 +546,63 @@ export function CategoryIcon({
       }}
     >
       <Ionicons name={name} size={size * 0.46} color={tint} />
+    </View>
+  )
+}
+
+/**
+ * Logo do banco (Nubank, Itaú), vindo da CDN da Pluggy. Fica sobre uma placa
+ * branca: os logos chegam sem fundo, e o roxo do Nubank sumiria no tema
+ * escuro. Sem logo, ou se a imagem não carregar, mostra o ícone genérico no
+ * quadrado de destaque, como antes.
+ */
+export function BankLogo({
+  uri,
+  fallback,
+  size = 36,
+}: {
+  uri: string | null | undefined
+  fallback: keyof typeof Ionicons.glyphMap
+  size?: number
+}) {
+  const theme = useTheme()
+  const [failed, setFailed] = useState(false)
+  const corner = size >= 30 ? 11 : Math.round(size * 0.3)
+  if (!uri || failed) {
+    return (
+      <View
+        style={{
+          width: size,
+          height: size,
+          borderRadius: corner,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: theme.accentSoft,
+        }}
+      >
+        <Ionicons name={fallback} size={Math.round(size * 0.47)} color={theme.accentText} />
+      </View>
+    )
+  }
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: corner,
+        overflow: 'hidden',
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: theme.border,
+      }}
+    >
+      <Image
+        source={{ uri }}
+        onError={() => setFailed(true)}
+        accessibilityIgnoresInvertColors
+        style={{ width: '100%', height: '100%' }}
+        resizeMode="contain"
+      />
     </View>
   )
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Animated, Easing, PanResponder, Pressable, SectionList, Text, View } from 'react-native'
 import {
   Amount,
+  BankLogo,
   Skeleton,
   SkeletonRow,
   EmptyState,
@@ -249,18 +250,7 @@ export default function Home() {
                         borderBottomColor: theme.border,
                       }}
                     >
-                      <View
-                        style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: 11,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: theme.accentSoft,
-                        }}
-                      >
-                        <Ionicons name="card-outline" size={17} color={theme.accentText} />
-                      </View>
+                      <BankLogo uri={card.bankIcon} fallback="card-outline" />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={{ ...type.row, color: theme.text }} numberOfLines={1}>
                           Fatura {card.bank}

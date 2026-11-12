@@ -6,6 +6,7 @@ import {
   Avatar,
   Gutter,
   ListGroup,
+  BankLogo,
   ListRow,
   Screen,
   SectionLabel,
@@ -79,7 +80,13 @@ function OpenFinanceSection() {
           ? data.accounts.map((account) => (
               <ListRow
                 key={`${account.type}:${account.name}`}
-                icon={tile(account.type === 'CREDIT' ? 'card-outline' : 'business-outline')}
+                icon={
+                  account.bankIcon ? (
+                    <BankLogo uri={account.bankIcon} fallback="business-outline" size={34} />
+                  ) : (
+                    tile(account.type === 'CREDIT' ? 'card-outline' : 'business-outline')
+                  )
+                }
                 label={accountLabel(account.type)}
                 detail={account.bank}
               />

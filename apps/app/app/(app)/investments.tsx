@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { Platform, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
 import Svg, { Circle, Line, Path } from 'react-native-svg'
 import {
+  BankLogo,
   Card,
   EmptyState,
   ErrorBanner,
@@ -263,7 +264,13 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
           </Text>
           <View style={{ gap: 8, marginTop: spacing.lg }}>
             {netWorth.accounts.map((a) => (
-              <InkLine key={a.bank} label={`Conta ${a.bank}`} value={formatBRL(a.balanceCents)} hidden={hidden} />
+              <InkLine
+                key={a.bank}
+                label={`Conta ${a.bank}`}
+                logo={a.bankIcon}
+                value={formatBRL(a.balanceCents)}
+                hidden={hidden}
+              />
             ))}
             <InkLine label="Investimentos" value={formatBRL(netWorth.investmentsCents)} hidden={hidden} />
             {netWorth.cardBillCents > 0 ? (
@@ -375,18 +382,7 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
                   borderBottomColor: theme.border,
                 }}
               >
-                <View
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 11,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: theme.accentSoft,
-                  }}
-                >
-                  <Ionicons name={GROUP_ICONS[p.group] ?? 'ellipse-outline'} size={17} color={theme.accentText} />
-                </View>
+                <BankLogo uri={p.issuerIcon} fallback={GROUP_ICONS[p.group] ?? 'ellipse-outline'} />
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={{ ...type.row, color: theme.text }} numberOfLines={1}>
                     {p.name}
@@ -444,10 +440,23 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
   )
 }
 
-function InkLine({ label, value, hidden }: { label: string; value: string; hidden: boolean }) {
+function InkLine({
+  label,
+  value,
+  hidden,
+  logo,
+}: {
+  label: string
+  value: string
+  hidden: boolean
+  logo?: string | null
+}) {
   return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md }}>
-      <Text style={{ ...type.body, color: inkCard.textSoft }}>{label}</Text>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
+        {logo ? <BankLogo uri={logo} fallback="business-outline" size={20} /> : null}
+        <Text style={{ ...type.body, color: inkCard.textSoft }}>{label}</Text>
+      </View>
       <Text style={[{ ...type.body, fontWeight: '600', color: inkCard.text }, tabular]}>
         {mask(value, hidden)}
       </Text>
