@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Alert, Animated, Easing, PanResponder, Pressable, SectionList, Text, View } from 'react-native'
 import {
   Amount,
@@ -20,10 +20,10 @@ import {
 } from '@/components/ui'
 import { MonthStrip } from '@/components/month-strip'
 import { client, unwrap } from '@/lib/api'
+import { useSelectedMonth } from '@/lib/month'
 import { useHidden } from '@/lib/privacy'
 import {
   addMonths,
-  currentMonth,
   formatBRL,
   formatMonth,
   monthBounds,
@@ -51,7 +51,8 @@ export default function Home() {
   const tabBarSpace = useTabBarSpace()
   const queryClient = useQueryClient()
 
-  const [month, setMonth] = useState(currentMonth())
+  // O mês é o mesmo em todas as abas (lib/month).
+  const [month, setMonth] = useSelectedMonth()
   const [hidden] = useHidden()
 
   // Trocar de mês desliza o saldo no sentido da troca: o mês seguinte entra
@@ -65,8 +66,11 @@ export default function Home() {
     setMonth(next)
   }
   useEffect(() => {
+    // Sem direção, a troca veio de outra aba: a tela já aparece no mês novo,
+    // sem deslizar escondida.
     if (!direction.current) return
     slide.setValue(direction.current * 28)
+    direction.current = 0
     fade.setValue(0)
     Animated.parallel([
       Animated.timing(slide, { toValue: 0, duration: 240, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
