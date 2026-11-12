@@ -296,6 +296,36 @@ export const openFinanceIgnored = pgTable(
 )
 
 /**
+ * "Lançamentos com esta descrição vão sempre para esta categoria." O padrão é
+ * a descrição normalizada (`normalizeDescription` em @nauri/contracts). A
+ * sincronização do Open Finance aplica a regra em todo lançamento novo; os que
+ * já existiam são trocados quando a regra é criada.
+ */
+export const categoryRules = pgTable(
+  'category_rules',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    kind: kindEnum('kind').notNull(),
+    pattern: text('pattern').notNull(),
+    categoryId: uuid('category_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Como nos lançamentos: uma regra de gasto nunca aponta para categoria de receita.
+    foreignKey({
+      columns: [t.categoryId, t.kind],
+      foreignColumns: [categories.id, categories.kind],
+      name: 'category_rules_category_kind_fk',
+    }).onDelete('cascade'),
+    uniqueIndex('category_rules_user_kind_pattern_uq').on(t.userId, t.kind, t.pattern),
+  ],
+)
+
+/**
  * Investimentos de cada conexão, como a Pluggy mostrou na última leitura. A
  * Pluggy só dá a foto de hoje; a evolução fica em `wealth_snapshots`.
  * Ver lib/investments.ts.

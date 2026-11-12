@@ -9,6 +9,7 @@ import { translateRateLimit } from './lib/rate-limit.js'
 import { withServices } from './middleware.js'
 import { accountRoute } from './routes/account.js'
 import { categoriesRoute } from './routes/categories.js'
+import { categoryRulesRoute } from './routes/category-rules.js'
 import { investmentsRoute } from './routes/investments.js'
 import { openFinanceRoute } from './routes/open-finance.js'
 import { reportsRoute } from './routes/reports.js'
@@ -65,6 +66,7 @@ app.get('/health', (c) => c.json({ ok: true }))
 
 const routes = app
   .route('/api/categories', categoriesRoute)
+  .route('/api/category-rules', categoryRulesRoute)
   .route('/api/transactions', transactionsRoute)
   .route('/api/reports', reportsRoute)
   .route('/api/account', accountRoute)

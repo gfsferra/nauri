@@ -64,6 +64,13 @@
       "when": 1794445832863,
       "tag": "0008_remove_recorrencias_orcamentos",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794485544790,
+      "tag": "0009_category_rules",
+      "breakpoints": true
     }
   ]
 }

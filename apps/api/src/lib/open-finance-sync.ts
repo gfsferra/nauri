@@ -1,7 +1,14 @@
-import { addDays, todayInTimezone } from '@nauri/contracts'
+import { addDays, categoryFromRules, ruleKey, todayInTimezone } from '@nauri/contracts'
 import { and, eq, gte, inArray, lte, notInArray, sql } from 'drizzle-orm'
 import type { Db } from '../db/client.js'
-import { bankAccounts, bankConnections, categories, openFinanceIgnored, transactions } from '../db/schema.js'
+import {
+  bankAccounts,
+  bankConnections,
+  categories,
+  categoryRules,
+  openFinanceIgnored,
+  transactions,
+} from '../db/schema.js'
 import type { Env } from '../env.js'
 import {
   bankCodeOf,
@@ -124,6 +131,15 @@ export async function syncOpenFinance(
         .where(eq(openFinanceIgnored.userId, config.userId))
     ).map((r) => r.externalId),
   )
+  // "Sempre usar esta categoria para esta descrição" (ver routes/category-rules.ts).
+  const rules = new Map(
+    (
+      await db
+        .select({ kind: categoryRules.kind, pattern: categoryRules.pattern, categoryId: categoryRules.categoryId })
+        .from(categoryRules)
+        .where(eq(categoryRules.userId, config.userId))
+    ).map((r) => [ruleKey(r.kind, r.pattern), r.categoryId] as const),
+  )
 
   const results: ConnectionSyncResult[] = []
   let firstError: unknown = null
@@ -139,6 +155,7 @@ export async function syncOpenFinance(
           connectedBanks,
           categoryIds,
           ignored,
+          rules,
         }),
       )
     } catch (error) {
@@ -237,6 +254,7 @@ async function syncConnection(
     connectedBanks: ReadonlySet<string>
     categoryIds: Map<string, string>
     ignored: Set<string>
+    rules: ReadonlyMap<string, string>
   },
 ): Promise<ConnectionSyncResult> {
   const { connection, item, today } = ctx
@@ -283,6 +301,7 @@ async function syncConnection(
       connectedBanks: ctx.connectedBanks,
       ignored: ctx.ignored,
       categoryIds: ctx.categoryIds,
+      rules: ctx.rules,
       // Só a leitura recente reconcilia pendentes: é a janela em que uma
       // compra pendente vira definitiva (às vezes com outro ID).
       reconcileWindow: plan.kind === 'recent' ? { from: plan.from, to: plan.to } : null,
@@ -467,6 +486,7 @@ async function applyTransactions(
     connectedBanks: ReadonlySet<string>
     ignored: Set<string>
     categoryIds: Map<string, string>
+    rules: ReadonlyMap<string, string>
     reconcileWindow: { from: string; to: string } | null
     result: ConnectionSyncResult
   },
@@ -495,7 +515,11 @@ async function applyTransactions(
           occurredOn: m.occurredOn,
           amountCents: m.amountCents,
           description: m.description,
-          categoryId: categoryIds.get(`${m.kind}:${m.categoryName.toLowerCase()}`)!,
+          // A regra do usuário vence a categoria que a Pluggy sugeriu. Só vale
+          // na inserção: no conflito abaixo a categoria não é tocada.
+          categoryId:
+            categoryFromRules(ctx.rules, m.kind, m.description) ??
+            categoryIds.get(`${m.kind}:${m.categoryName.toLowerCase()}`)!,
           externalId: m.externalId,
           bankAccountId: account.id,
           isPending: m.isPending,
