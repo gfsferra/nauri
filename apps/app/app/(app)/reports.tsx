@@ -28,6 +28,7 @@ import {
 } from '@/components/ui'
 import { MonthStrip } from '@/components/month-strip'
 import { client, unwrap } from '@/lib/api'
+import { useSelectedMonth } from '@/lib/month'
 import {
   addMonths,
   capitalize,
@@ -39,7 +40,6 @@ import {
   relativeDay,
   today,
 } from '@/lib/format'
-import { useSelectedMonth } from '@/lib/month'
 import { useHidden } from '@/lib/privacy'
 import { radius, spacing, tabular, type, useTheme } from '@/lib/theme'
 
