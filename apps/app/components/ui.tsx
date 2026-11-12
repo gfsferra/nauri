@@ -210,29 +210,23 @@ export function Amount({
         type.amount,
         tabular,
         { color, fontSize: size ?? type.amount.fontSize },
-        privacyBlur(hidden, color),
       ]}
     >
       {sign}
-      {format(Math.abs(cents))}
+      {mask(format(Math.abs(cents)), hidden)}
     </Text>
   )
 }
 
 /**
- * Desfoque de privacidade (DS, decisão 03): o olho no cabeçalho embaça o valor
- * em vez de trocá-lo por asteriscos — a forma do número permanece, o dado não.
- * Em React Native o efeito sai do próprio glifo: texto transparente com sombra
- * do mesmo tom e raio alto, que é um borrão de verdade, não uma máscara.
+ * Valor oculto pelo olho do cabeçalho: os números viram bolinhas e o resto
+ * fica ("+ R$ 1.234,56" → "+ R$ ••••"). A quantidade de bolinhas é fixa de
+ * propósito: uma por dígito entregaria a ordem de grandeza do valor.
  */
-export function privacyBlur(hidden: boolean, color: string): TextStyle | null {
-  if (!hidden) return null
-  return {
-    color: 'transparent',
-    textShadowColor: color,
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 14,
-  }
+export const MASK = '••••'
+
+export function mask(text: string, hidden: boolean): string {
+  return hidden ? text.replace(/\d[\d.,]*/g, MASK) : text
 }
 
 /**
