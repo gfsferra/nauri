@@ -45,8 +45,8 @@ function rateText(rate: number): string {
   return `${p < 0 ? '−' : ''}${Math.abs(p)}%`
 }
 
-function percentText(p: number): string {
-  return `${p >= 0 ? '+' : '−'}${Math.abs(p).toFixed(1).replace('.', ',')}%`
+function percentText(p: number, digits = 1): string {
+  return `${p >= 0 ? '+' : '−'}${Math.abs(p).toFixed(digits).replace('.', ',')}%`
 }
 
 const GROUP_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -128,7 +128,7 @@ export default function Investments() {
 
 function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
   const theme = useTheme()
-  const { portfolio, netWorth, monthly, history, savings } = data
+  const { portfolio, netWorth, monthly, history, savings, yield: yields } = data
   const reserve = savings.reserveMonths
 
   return (
@@ -224,6 +224,7 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
       {/* ── evolução ── */}
       <Gutter>
         <Card>
+          <MonthYield current={yields.current} previous={yields.previous} hidden={hidden} />
           <EvolutionChart history={history} hidden={hidden} />
         </Card>
       </Gutter>
@@ -377,6 +378,60 @@ function InkLine({ label, value, hidden }: { label: string; value: string; hidde
       <Text style={{ ...type.body, color: inkCard.textSoft }}>{label}</Text>
       <Text style={[{ ...type.body, fontWeight: '600', color: inkCard.text }, tabular, privacyBlur(hidden, inkCard.text)]}>
         {value}
+      </Text>
+    </View>
+  )
+}
+
+/**
+ * Rendimento do mês, sem aportes e resgates: o quanto o dinheiro trabalhou
+ * sozinho. Sem duas fotos não há o que mostrar, e quem explica o motivo é o
+ * texto do gráfico logo abaixo.
+ */
+function MonthYield({
+  current,
+  previous,
+  hidden,
+}: {
+  current: Ready['yield']['current']
+  previous: Ready['yield']['previous']
+  hidden: boolean
+}) {
+  const theme = useTheme()
+  if (!current) return null
+  const up = current.yieldCents >= 0
+  return (
+    <View style={{ marginBottom: spacing.lg }}>
+      <Text style={{ ...type.caption, color: theme.text2 }}>Rendeu em {monthName(current.month)}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
+        <Text
+          style={[
+            { fontSize: 24, fontWeight: '700', letterSpacing: -0.6 },
+            tabular,
+            { color: up ? theme.positive : theme.text },
+            privacyBlur(hidden, up ? theme.positive : theme.text),
+          ]}
+        >
+          {signed(current.yieldCents)}
+        </Text>
+        {current.percent !== null ? (
+          <Text style={[{ ...type.body, fontWeight: '600', color: up ? theme.positive : theme.text2 }, tabular]}>
+            {/* Um mês de renda fixa rende perto de 1%: uma casa só não separa os meses. */}
+            {percentText(current.percent, 2)}
+          </Text>
+        ) : null}
+      </View>
+      <Text style={{ ...type.caption, color: theme.text2, marginTop: 2 }}>
+        Sem contar aportes e resgates
+        {current.partial ? ` · desde ${formatDate(current.fromDay)}` : ''}
+        {previous ? (
+          <>
+            {' · '}
+            {monthName(previous.month)}
+            {previous.partial ? ` (desde ${previous.fromDay.slice(8, 10)}/${previous.fromDay.slice(5, 7)})` : ''}:{' '}
+            <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{signed(previous.yieldCents)}</Text>
+          </>
+        ) : null}
       </Text>
     </View>
   )

@@ -12,7 +12,7 @@ import {
 } from '../db/schema.js'
 import type { AppContext } from '../env.js'
 import { toCents } from '../lib/cents.js'
-import { monthlyFlows, portfolioSummary, savingsSummary } from '../lib/investments.js'
+import { monthlyFlows, monthYield, portfolioSummary, savingsSummary } from '../lib/investments.js'
 import { bankLabelOf } from '../lib/open-finance.js'
 import { openFinanceConfig } from '../lib/open-finance-sync.js'
 import { requireAuth } from '../middleware.js'
@@ -133,6 +133,11 @@ export const investmentsRoute = new Hono<AppContext>()
       /** O mês corrente é o último da série. */
       monthly,
       savings,
+      /** Rendimento sem aportes e resgates, a partir das fotos diárias. */
+      yield: {
+        current: monthYield(history, movements, month),
+        previous: monthYield(history, movements, addMonthsToMonth(month, -1)),
+      },
       netWorth: {
         totalCents: accountsCents + portfolio.totalCents - cardBillCents,
         accountsCents,
