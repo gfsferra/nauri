@@ -289,7 +289,7 @@ export default function Home() {
             <Gutter>
               <EmptyState
                 title={`Nenhum lançamento em ${formatMonth(month)}.`}
-                hint="Os lançamentos chegam do banco pelo Open Finance, ou pela importação de planilha em Perfil."
+                hint="Os lançamentos chegam do banco pelo Open Finance."
               />
             </Gutter>
           )

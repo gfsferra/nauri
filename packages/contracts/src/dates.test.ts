@@ -7,7 +7,6 @@ import {
   isValidIsoDate,
   lastDayOfMonth,
   monthBounds,
-  safeParseDateToIso,
   todayInTimezone,
   weekdayOf,
 } from './dates'
@@ -85,39 +84,4 @@ describe('aritmética de calendário', () => {
     expect(isValidIsoDate('2026-02-28')).toBe(true)
     expect(isValidIsoDate('29/08/2026')).toBe(false)
   })
-})
-
-describe('safeParseDateToIso — leitura da planilha', () => {
-  it.each([
-    ['05/03/2026', '2026-03-05'],
-    ['5/3/2026', '2026-03-05'],
-    ['05-03-2026', '2026-03-05'],
-    ['05.03.2026', '2026-03-05'],
-    ['2026-03-05', '2026-03-05'],
-    ['31/12/2026', '2026-12-31'],
-  ])('lê %s como %s', (input, expected) => {
-    expect(safeParseDateToIso(input)).toEqual({ ok: true, date: expected })
-  })
-
-  it('desempata pelo número que só pode ser dia', () => {
-    expect(safeParseDateToIso('13/03/2026')).toEqual({ ok: true, date: '2026-03-13' })
-    expect(safeParseDateToIso('03/13/2026')).toEqual({ ok: true, date: '2026-03-13' })
-  })
-
-  it('na dúvida assume dd/mm, a convenção brasileira', () => {
-    expect(safeParseDateToIso('03/04/2026')).toEqual({ ok: true, date: '2026-04-03' })
-    expect(safeParseDateToIso('03/04/2026', 'mdy')).toEqual({ ok: true, date: '2026-03-04' })
-  })
-
-  it('completa o século em anos de dois dígitos', () => {
-    expect(safeParseDateToIso('05/03/26')).toEqual({ ok: true, date: '2026-03-05' })
-    expect(safeParseDateToIso('05/03/99')).toEqual({ ok: true, date: '1999-03-05' })
-  })
-
-  it.each(['', '31/02/2026', '32/01/2026', '00/01/2026', 'ontem', '2026-02-30'])(
-    'rejeita %j',
-    (input) => {
-      expect(safeParseDateToIso(input).ok).toBe(false)
-    },
-  )
 })

@@ -166,7 +166,7 @@ export function categoryFor(kind: 'expense' | 'income', pluggyCategory: string |
 
 /**
  * Reais → centavos sem passar por `* 100` em ponto flutuante: o número vira
- * texto e segue o mesmo parser em string da importação de planilha.
+ * texto e segue o parser em string de `@nauri/contracts`.
  */
 export function amountToCents(amount: number): number {
   const text = Math.abs(amount).toString()

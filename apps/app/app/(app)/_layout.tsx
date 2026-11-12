@@ -114,9 +114,6 @@ export default function AppLayout() {
           tabBarIcon: ({ color }) => <Ionicons name="trending-up-outline" color={color} size={21} />,
         }}
       />
-      {/* Importar é operação pontual, não merece uma aba fixa: `href: null`
-          mantém a rota navegável sem ocupar espaço na barra. */}
-      <Tabs.Screen name="import" options={{ href: null }} />
       <Tabs.Screen
         name="settings"
         options={{

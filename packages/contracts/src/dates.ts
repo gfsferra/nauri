@@ -13,10 +13,6 @@ import type { IsoDate, Month } from './primitives'
 
 export const TIMEZONE = 'America/Sao_Paulo'
 
-export type DateParseResult =
-  | { ok: true; date: IsoDate }
-  | { ok: false; error: string }
-
 const pad = (n: number, size = 2) => String(n).padStart(size, '0')
 
 export function makeIso(year: number, month: number, day: number): IsoDate {
@@ -94,51 +90,4 @@ export function monthBounds(month: Month): { from: IsoDate; to: IsoDate } {
 export function weekdayOf(iso: IsoDate): number {
   const { year, month, day } = parseIsoParts(iso)
   return new Date(Date.UTC(year, month - 1, day)).getUTCDay()
-}
-
-export type DayOrder = 'auto' | 'dmy' | 'mdy'
-
-/**
- * Lê as datas que aparecem numa planilha exportada.
- *
- * Aceita AAAA-MM-DD, dd/mm/aaaa, dd-mm-aaaa e dd.mm.aaaa, com ano de 2 ou 4
- * dígitos. Em `auto`, um número acima de 12 denuncia qual campo é o dia; quando
- * os dois são ambíguos ("03/04/2026") assume dd/mm, que é a convenção
- * brasileira — e a tela de importação deixa corrigir no preview.
- */
-export function safeParseDateToIso(raw: string, order: DayOrder = 'auto'): DateParseResult {
-  const s = String(raw ?? '').trim()
-  if (s === '') return { ok: false, error: 'Data vazia' }
-
-  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s)
-  if (iso) {
-    const [year, month, day] = [Number(iso[1]), Number(iso[2]), Number(iso[3])]
-    return finish(year, month, day, s)
-  }
-
-  const parts = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2}|\d{4})$/.exec(s)
-  if (!parts) return { ok: false, error: `Data não reconhecida: "${raw}"` }
-
-  const a = Number(parts[1])
-  const b = Number(parts[2])
-  let year = Number(parts[3])
-  if (parts[3]!.length === 2) year += year >= 70 ? 1900 : 2000
-
-  let day: number
-  let month: number
-  if (order === 'mdy') [month, day] = [a, b]
-  else if (order === 'dmy') [day, month] = [a, b]
-  else if (a > 12) [day, month] = [a, b]
-  else if (b > 12) [month, day] = [a, b]
-  else [day, month] = [a, b] // empate: convenção brasileira
-
-  return finish(year, month, day, s)
-}
-
-function finish(year: number, month: number, day: number, raw: string): DateParseResult {
-  if (month < 1 || month > 12) return { ok: false, error: `Mês inválido em "${raw}"` }
-  if (day < 1 || day > lastDayOfMonth(year, month)) {
-    return { ok: false, error: `Dia inválido em "${raw}"` }
-  }
-  return { ok: true, date: makeIso(year, month, day) }
 }
