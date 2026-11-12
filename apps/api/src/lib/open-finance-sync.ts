@@ -5,6 +5,7 @@ import { bankAccounts, bankConnections, categories, openFinanceIgnored, transact
 import type { Env } from '../env.js'
 import {
   bankCodeOf,
+  bankIconOf,
   bankLabelOf,
   HISTORY_DAYS,
   mapPluggyTransaction,
@@ -611,12 +612,16 @@ export async function openFinanceStatus(db: Db, config: OpenFinanceConfig) {
     historyComplete: connections.every((c) => c.backfillCursor <= c.syncFrom),
     historyFrom: connections.map((c) => c.backfillCursor).sort().at(-1)!,
     lastError: connections.find((c) => c.lastError)?.lastError ?? null,
-    accounts: accounts.map((a) => ({ name: a.name, type: a.type, bank: bankOf.get(a.connectionId) ?? bankLabelOf(a.name) })),
+    accounts: accounts.map((a) => {
+      const bank = bankOf.get(a.connectionId) ?? bankLabelOf(a.name)
+      return { name: a.name, type: a.type, bank, bankIcon: bankIconOf(bank) }
+    }),
     /** Fatura em aberto de cada cartão, para a tela inicial. */
     cards: accounts
       .filter((a) => a.type === 'CREDIT' && a.billDueOn !== null && a.billAmountCents !== null)
       .map((a) => ({
         bank: bankOf.get(a.connectionId) ?? bankLabelOf(a.name),
+        bankIcon: bankIconOf(bankOf.get(a.connectionId) ?? bankLabelOf(a.name)),
         billAmountCents: a.billAmountCents!,
         billDueOn: a.billDueOn!,
         billUpdatedAt: iso(a.billUpdatedAt),

@@ -13,7 +13,7 @@ import {
 import type { AppContext } from '../env.js'
 import { toCents } from '../lib/cents.js'
 import { monthlyFlows, monthYield, portfolioSummary, savingsSummary } from '../lib/investments.js'
-import { bankLabelOf } from '../lib/open-finance.js'
+import { bankIconOf, bankLabelOf } from '../lib/open-finance.js'
 import { openFinanceConfig } from '../lib/open-finance-sync.js'
 import { requireAuth } from '../middleware.js'
 
@@ -143,7 +143,10 @@ export const investmentsRoute = new Hono<AppContext>()
         accountsCents,
         investmentsCents: portfolio.totalCents,
         cardBillCents,
-        accounts: checking.map((a) => ({ bank: bankLabelOf(a.name), balanceCents: a.balanceCents ?? 0 })),
+        accounts: checking.map((a) => {
+          const bank = bankLabelOf(a.name)
+          return { bank, bankIcon: bankIconOf(bank), balanceCents: a.balanceCents ?? 0 }
+        }),
       },
       history: history.map((h) => ({
         day: h.day,

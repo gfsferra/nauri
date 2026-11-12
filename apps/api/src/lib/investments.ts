@@ -1,5 +1,5 @@
 import { addDays, addMonthsToMonth } from '@nauri/contracts'
-import { amountToCents } from './open-finance.js'
+import { amountToCents, bankIconOf } from './open-finance.js'
 
 /**
  * Investimentos do Open Finance (Meu Pluggy). Funções puras: conversão do
@@ -412,6 +412,8 @@ export function portfolioSummary(rows: readonly PositionRow[], today?: string) {
       id: r.externalId,
       name: displayName(r),
       group: groupOf(r.type, r.subtype),
+      /** Logo do emissor quando é um banco conhecido (o CDB do Nubank). */
+      issuerIcon: bankIconOf(issuerLabel(r.issuer)),
       rate: rateLabel(r),
       dueOn: r.dueOn,
       quantity: r.type === 'ETF' || r.type === 'EQUITY' ? r.quantity : null,

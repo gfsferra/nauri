@@ -204,6 +204,23 @@ export function bankLabelOf(accountName: string): string {
 }
 
 /**
+ * Logo de cada banco, servido pela CDN da Pluggy: o mesmo ícone do catálogo
+ * de conectores dela (`GET /connectors`). As conexões do Meu Pluggy vêm com o
+ * ícone genérico do conector 200, então o banco sai do nome da conta. O app
+ * carrega a imagem direto da Pluggy em vez de guardar marcas de terceiros no
+ * repositório, que é público.
+ */
+const BANK_ICONS: Record<string, string> = {
+  Nubank: 'https://cdn.pluggy.ai/assets/connector-icons/212.svg',
+  Itaú: 'https://cdn.pluggy.ai/assets/connector-icons/201.svg',
+}
+
+/** URL do logo do banco ("Nubank", "Itaú"); null para os que não conhecemos. */
+export function bankIconOf(bank: string | null | undefined): string | null {
+  return (bank && BANK_ICONS[bank]) || null
+}
+
+/**
  * O dia que conta para o orçamento de uma compra no cartão. A fatura que
  * vence num mês é paga com o salário do mês anterior, então a compra pesa no
  * mês anterior ao vencimento da fatura dela: a parcela de 31/10 na fatura que
