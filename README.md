@@ -189,6 +189,13 @@ um repasse entre contas contaria duas vezes). No
   anterior; sem ela, a primeira do mês, e o número sai como "desde dia X". O
   percentual é o de Dietz modificado: cada aporte pesa pelos dias em que
   ficou aplicado. Aparece no quadro da evolução, com o mês anterior ao lado.
+- **Imposto menor em breve** (`taxSchedule`): IR regressivo de CDB, RDB, LC,
+  LF e Tesouro pela data de compra (22,5% até 180 dias, 20% até 360, 17,5%
+  até 720 e 15% depois) e IOF até o 30º dia. LCI, LCA e debêntures ficam de
+  fora (isentas ou sem como saber). Cada posição mostra a alíquota e quando
+  ela cai. Quedas de IR nos próximos 30 dias e IOF ainda ativo viram aviso,
+  com a economia estimada sobre o ganho de hoje. Conferido contra o imposto
+  que a Pluggy informa (bruto − líquido): bate no centavo.
 
 O acesso autorizado ao banco vence em 12 meses. A partir de 30 dias antes do
 vencimento, o Perfil avisa para renovar no Meu Pluggy.

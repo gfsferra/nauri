@@ -1,4 +1,4 @@
-import { addMonthsToMonth } from '@nauri/contracts'
+import { addDays, addMonthsToMonth } from '@nauri/contracts'
 import { amountToCents } from './open-finance.js'
 
 /**
@@ -309,7 +309,73 @@ export function monthlyFlows(
   }))
 }
 
-type PositionRow = Pick<
+/* ──────────────────────── IR e IOF regressivos ───────────────────── */
+
+/**
+ * Tabela regressiva do IR na renda fixa, por dias desde a aplicação: 22,5%
+ * até 180 dias, 20% até 360, 17,5% até 720 e 15% depois disso.
+ */
+export const IR_BRACKETS = [
+  { upToDays: 180, rate: 22.5 },
+  { upToDays: 360, rate: 20 },
+  { upToDays: 720, rate: 17.5 },
+  { upToDays: Number.POSITIVE_INFINITY, rate: 15 },
+] as const
+
+/** IOF regressivo: some a partir do 30º dia da aplicação. */
+export const IOF_FREE_FROM_DAY = 30
+
+/**
+ * Títulos com IR regressivo. LCI, LCA, CRI e CRA são isentos para pessoa
+ * física. Debênture fica de fora porque a incentivada também é isenta, e a
+ * Pluggy não diz qual é qual.
+ */
+const REGRESSIVE_SUBTYPES = new Set(['CDB', 'RDB', 'LC', 'LF', 'TREASURY'])
+
+export interface TaxSchedule {
+  /** Dias desde a aplicação. */
+  days: number
+  /** Alíquota de IR de hoje, em %. */
+  irRate: number
+  /** A próxima queda do IR; null quando já está nos 15%. */
+  next: { rate: number; on: string; inDays: number } | null
+  /** Até quando há IOF no resgate (exclusive); null depois do 30º dia. */
+  iofUntil: string | null
+}
+
+/**
+ * Onde a posição está na tabela regressiva e quando a alíquota cai. A conta
+ * é por posição, a partir da data de compra que a Pluggy informa; um CDB que
+ * recebeu vários aportes teria uma data por aporte, mas no Nubank cada
+ * aplicação vira uma posição própria.
+ */
+export function taxSchedule(
+  inv: { type: string; subtype: string | null; purchaseOn: string | null },
+  today: string,
+): TaxSchedule | null {
+  if (inv.type !== 'FIXED_INCOME' || !inv.subtype || !REGRESSIVE_SUBTYPES.has(inv.subtype) || !inv.purchaseOn) {
+    return null
+  }
+  const days = daysBetween(inv.purchaseOn, today)
+  if (days < 0) return null
+  const index = IR_BRACKETS.findIndex((b) => days <= b.upToDays)
+  const bracket = IR_BRACKETS[index]!
+  const following = IR_BRACKETS[index + 1]
+  // O dia seguinte ao último da faixa já é da faixa de baixo.
+  const nextOn = following ? addDays(inv.purchaseOn, bracket.upToDays + 1) : null
+  return {
+    days,
+    irRate: bracket.rate,
+    next: following && nextOn ? { rate: following.rate, on: nextOn, inDays: daysBetween(today, nextOn) } : null,
+    iofUntil: days < IOF_FREE_FROM_DAY ? addDays(inv.purchaseOn, IOF_FREE_FROM_DAY) : null,
+  }
+}
+
+/** Quanto antes as quedas de imposto viram aviso na aba. */
+export const TAX_DROP_NOTICE_DAYS = 30
+
+type PositionRow = Partial<Pick<MappedInvestment, 'purchaseOn'>> &
+  Pick<
   MappedInvestment,
   | 'externalId'
   | 'type'
@@ -333,13 +399,31 @@ type PositionRow = Pick<
  * posições ativas. O rendimento só soma as posições com custo conhecido, e o
  * percentual é sobre esse mesmo custo, para não comparar coisas diferentes.
  */
-export function portfolioSummary(rows: readonly PositionRow[]) {
+export function portfolioSummary(rows: readonly PositionRow[], today?: string) {
   const active = rows.filter((r) => r.status !== 'TOTAL_WITHDRAWAL' && r.balanceCents > 0)
   const totalCents = active.reduce((s, r) => s + r.balanceCents, 0)
   const grossCents = active.reduce((s, r) => s + r.grossCents, 0)
   const known = active.filter((r) => r.costCents !== null)
   const costCents = known.reduce((s, r) => s + r.costCents!, 0)
   const profitCents = known.reduce((s, r) => s + r.balanceCents - r.costCents!, 0)
+
+  const positions = active
+    .map((r) => ({
+      id: r.externalId,
+      name: displayName(r),
+      group: groupOf(r.type, r.subtype),
+      rate: rateLabel(r),
+      dueOn: r.dueOn,
+      quantity: r.type === 'ETF' || r.type === 'EQUITY' ? r.quantity : null,
+      balanceCents: r.balanceCents,
+      profitCents: r.costCents === null ? null : r.balanceCents - r.costCents,
+      /** Ganho bruto sobre o custo: a base do IR. */
+      gainCents: r.costCents === null ? null : r.grossCents - r.costCents,
+      /** IR e IOF de um resgate hoje, como a Pluggy calcula (bruto − líquido). */
+      taxesCents: r.grossCents - r.balanceCents,
+      tax: today ? taxSchedule({ type: r.type, subtype: r.subtype, purchaseOn: r.purchaseOn ?? null }, today) : null,
+    }))
+    .sort((a, b) => b.balanceCents - a.balanceCents)
 
   const groups = new Map<InvestmentGroup, number>()
   for (const r of active) {
@@ -359,20 +443,74 @@ export function portfolioSummary(rows: readonly PositionRow[]) {
     groups: [...groups.entries()]
       .map(([group, cents]) => ({ group, label: GROUP_LABELS[group], totalCents: cents }))
       .sort((a, b) => b.totalCents - a.totalCents),
-    positions: active
-      .map((r) => ({
-        id: r.externalId,
-        name: displayName(r),
-        group: groupOf(r.type, r.subtype),
-        rate: rateLabel(r),
-        dueOn: r.dueOn,
-        quantity: r.type === 'ETF' || r.type === 'EQUITY' ? r.quantity : null,
-        balanceCents: r.balanceCents,
-        profitCents: r.costCents === null ? null : r.balanceCents - r.costCents,
-      }))
-      .sort((a, b) => b.balanceCents - a.balanceCents),
+    positions,
+    taxDrops: taxDropsOf(positions),
     closedCount: rows.length - active.length,
   }
+}
+
+/**
+ * As quedas de imposto que valem aviso: IR que cai nos próximos 30 dias e
+ * IOF que ainda não zerou, a mais próxima primeiro. Quem pensa em resgatar
+ * sabe quanto esperar e quanto deixa de pagar.
+ */
+function taxDropsOf(
+  positions: ReadonlyArray<{
+    id: string
+    name: string
+    tax: TaxSchedule | null
+    gainCents: number | null
+    taxesCents: number
+  }>,
+) {
+  const drops: Array<{
+    id: string
+    name: string
+    kind: 'ir' | 'iof'
+    on: string
+    inDays: number
+    fromRate: number | null
+    toRate: number | null
+    /**
+     * Imposto que deixa de pagar sobre o ganho de hoje; null sem custo
+     * conhecido. No IOF é o imposto de hoje menos o IR que fica: o IOF vai
+     * caindo dia a dia até zerar.
+     */
+    savingsCents: number | null
+  }> = []
+  for (const p of positions) {
+    if (!p.tax) continue
+    if (p.tax.iofUntil) {
+      const ir = p.gainCents !== null && p.gainCents > 0 ? Math.round((p.gainCents * p.tax.irRate) / 100) : null
+      drops.push({
+        id: p.id,
+        name: p.name,
+        kind: 'iof',
+        on: p.tax.iofUntil,
+        inDays: IOF_FREE_FROM_DAY - p.tax.days,
+        fromRate: null,
+        toRate: null,
+        savingsCents: ir !== null && p.taxesCents > ir ? p.taxesCents - ir : null,
+      })
+    }
+    const next = p.tax.next
+    if (next && next.inDays <= TAX_DROP_NOTICE_DAYS) {
+      drops.push({
+        id: p.id,
+        name: p.name,
+        kind: 'ir',
+        on: next.on,
+        inDays: next.inDays,
+        fromRate: p.tax.irRate,
+        toRate: next.rate,
+        savingsCents:
+          p.gainCents !== null && p.gainCents > 0
+            ? Math.round((p.gainCents * (p.tax.irRate - next.rate)) / 100)
+            : null,
+      })
+    }
+  }
+  return drops.sort((a, b) => a.on.localeCompare(b.on))
 }
 
 /* ─────────────────────── poupança e reserva ──────────────────────── */

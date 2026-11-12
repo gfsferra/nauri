@@ -45,6 +45,20 @@ function rateText(rate: number): string {
   return `${p < 0 ? '−' : ''}${Math.abs(p)}%`
 }
 
+/** '2027-02-21' → '21/02/2027'. */
+function shortDate(iso: string): string {
+  return iso.split('-').reverse().join('/')
+}
+
+/** 22.5 → '22,5'. */
+function taxRate(rate: number): string {
+  return rate.toLocaleString('pt-BR', { maximumFractionDigits: 1 })
+}
+
+function inDaysText(days: number): string {
+  return days <= 0 ? 'hoje' : days === 1 ? 'amanhã' : `em ${days} dias`
+}
+
 function percentText(p: number, digits = 1): string {
   return `${p >= 0 ? '+' : '−'}${Math.abs(p).toFixed(digits).replace('.', ',')}%`
 }
@@ -289,6 +303,59 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
         </Gutter>
       ) : null}
 
+      {/* ── imposto que cai em breve: vale esperar para resgatar ── */}
+      {portfolio.taxDrops.length ? (
+        <Gutter style={{ gap: spacing.md }}>
+          <SectionLabel>Imposto menor em breve</SectionLabel>
+          <ListGroup>
+            {portfolio.taxDrops.map((d, i) => (
+              <View
+                key={`${d.id}:${d.kind}`}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: spacing.md,
+                  paddingHorizontal: spacing.lg,
+                  paddingVertical: 12,
+                  borderBottomWidth: i === portfolio.taxDrops.length - 1 ? 0 : 1,
+                  borderBottomColor: theme.border,
+                }}
+              >
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 11,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: theme.positiveSoft,
+                  }}
+                >
+                  <Ionicons name="hourglass-outline" size={17} color={theme.positive} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={{ ...type.row, color: theme.text }} numberOfLines={1}>
+                    {d.name}
+                  </Text>
+                  <Text style={{ ...type.caption, color: theme.text2, marginTop: 2 }}>
+                    {d.kind === 'iof'
+                      ? `IOF zera ${inDaysText(d.inDays)} (${shortDate(d.on)})`
+                      : `IR cai de ${taxRate(d.fromRate!)}% para ${taxRate(d.toRate!)}% ${inDaysText(d.inDays)} (${shortDate(d.on)})`}
+                    {/* Centavos não mudam a decisão de esperar: só a partir de R$ 1. */}
+                    {d.savingsCents !== null && d.savingsCents >= 100 ? (
+                      <>
+                        {' · esperar poupa cerca de '}
+                        <Text style={[tabular, privacyBlur(hidden, theme.text2)]}>{formatBRL(d.savingsCents)}</Text>
+                      </>
+                    ) : null}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </ListGroup>
+        </Gutter>
+      ) : null}
+
       {/* ── posições ── */}
       <Gutter style={{ gap: spacing.md }}>
         <SectionLabel>Posições</SectionLabel>
@@ -335,6 +402,14 @@ function Body({ data, hidden }: { data: Ready; hidden: boolean }) {
                       .filter(Boolean)
                       .join(' · ')}
                   </Text>
+                  {p.tax ? (
+                    <Text style={{ ...type.caption, color: theme.text3, marginTop: 1 }} numberOfLines={1}>
+                      IR {taxRate(p.tax.irRate)}%
+                      {p.tax.next
+                        ? ` → ${taxRate(p.tax.next.rate)}% em ${shortDate(p.tax.next.on).replace(/\/(\d{2})(\d{2})$/, '/$2')}`
+                        : ' (a menor alíquota)'}
+                    </Text>
+                  ) : null}
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 2 }}>
                   <Text
