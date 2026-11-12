@@ -17,6 +17,7 @@ import {
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg'
+import { useHidden } from '@/lib/privacy'
 import { radius, spacing, tabular, type, useTheme } from '@/lib/theme'
 
 /* ─────────────────────────── superfícies ─────────────────────────── */
@@ -251,6 +252,27 @@ export const MASK = '••••'
 
 export function mask(text: string, hidden: boolean): string {
   return hidden ? text.replace(/\d[\d.,]*/g, MASK) : text
+}
+
+/**
+ * O olho que esconde os valores. O estado é do app inteiro (`lib/privacy`):
+ * esconder na Início esconde também nos Relatórios.
+ */
+export function EyeToggle() {
+  const theme = useTheme()
+  const [hidden, setHidden] = useHidden()
+  return (
+    <Pressable
+      onPress={() => setHidden(!hidden)}
+      accessibilityRole="button"
+      accessibilityLabel={hidden ? 'Mostrar valores' : 'Ocultar valores'}
+      accessibilityState={{ checked: hidden }}
+      hitSlop={8}
+      style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md }}
+    >
+      <Ionicons name={hidden ? 'eye-off-outline' : 'eye-outline'} size={22} color={theme.text2} />
+    </Pressable>
+  )
 }
 
 /**
