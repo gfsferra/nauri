@@ -438,3 +438,72 @@ export function savingsSummary(
     }),
   }
 }
+
+/* ─────────────────────── rendimento do mês ───────────────────────── */
+
+export interface Snapshot {
+  day: string
+  investmentsCents: number
+}
+
+/** Dias entre duas datas ISO (b − a). */
+function daysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000)
+}
+
+/**
+ * Quanto os investimentos renderam num mês, sem contar o dinheiro que entrou
+ * ou saiu: valor no fim − valor no início − (aportes − resgates).
+ *
+ * O início é a última foto do mês anterior. Sem ela (as fotos começaram no
+ * meio do mês), vale a primeira foto do próprio mês, e o resultado sai
+ * marcado como parcial. O fim é a última foto do mês.
+ *
+ * O percentual é o de Dietz modificado: cada aporte ou resgate pesa pela
+ * fração do período em que ficou aplicado. Sem isso, um aporte grande no
+ * último dia faria o mês parecer render menos do que rendeu.
+ *
+ * Aportes e resgates são os mesmos do "guardado": a compra pelo valor que
+ * saiu da conta, o resgate pelo líquido que voltou. Como o valor das fotos
+ * também é o líquido, IR e IOF do resgate não aparecem como rendimento.
+ */
+export function monthYield(
+  snapshots: readonly Snapshot[],
+  movements: readonly Pick<MappedMovement, 'type' | 'occurredOn' | 'amountCents' | 'netAmountCents'>[],
+  month: string,
+) {
+  const first = `${month}-01`
+  const sorted = [...snapshots].sort((a, b) => a.day.localeCompare(b.day))
+  const inMonth = sorted.filter((s) => s.day.slice(0, 7) === month)
+  const end = inMonth.at(-1)
+  if (!end) return null
+  const before = sorted.filter((s) => s.day < first).at(-1)
+  const start = before ?? inMonth[0]!
+  const span = daysBetween(start.day, end.day)
+  if (span <= 0) return null
+
+  let flowsCents = 0
+  let weightedFlows = 0
+  for (const m of movements) {
+    if (m.occurredOn <= start.day || m.occurredOn > end.day) continue
+    const flow = m.type === 'BUY' ? m.amountCents : m.type === 'SELL' ? -(m.netAmountCents ?? m.amountCents) : 0
+    if (flow === 0) continue
+    flowsCents += flow
+    weightedFlows += flow * (daysBetween(m.occurredOn, end.day) / span)
+  }
+
+  const yieldCents = end.investmentsCents - start.investmentsCents - flowsCents
+  const base = start.investmentsCents + weightedFlows
+  return {
+    month,
+    fromDay: start.day,
+    toDay: end.day,
+    /** Começou no meio do mês: ainda não há foto do fim do mês anterior. */
+    partial: !before,
+    startCents: start.investmentsCents,
+    endCents: end.investmentsCents,
+    flowsCents,
+    yieldCents,
+    percent: base > 0 ? (yieldCents / base) * 100 : null,
+  }
+}

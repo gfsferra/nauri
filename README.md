@@ -184,6 +184,11 @@ um repasse entre contas contaria duas vezes). No
   saídas, contando só meses com gasto. A taxa é o guardado dividido pelas
   entradas, somando os meses antes de dividir. O gráfico do guardado mostra
   também a taxa do mês escolhido.
+- **Rendimento do mês** (`monthYield`): valor no fim − valor no início −
+  (aportes − resgates), pelas fotos diárias. O início é a última foto do mês
+  anterior; sem ela, a primeira do mês, e o número sai como "desde dia X". O
+  percentual é o de Dietz modificado: cada aporte pesa pelos dias em que
+  ficou aplicado. Aparece no quadro da evolução, com o mês anterior ao lado.
 
 O acesso autorizado ao banco vence em 12 meses. A partir de 30 dias antes do
 vencimento, o Perfil avisa para renovar no Meu Pluggy.

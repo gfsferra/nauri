@@ -7,6 +7,7 @@ import {
   mapInvestment,
   mapMovement,
   monthlyFlows,
+  monthYield,
   planMovementFetches,
   portfolioSummary,
   rateLabel,
@@ -365,5 +366,78 @@ describe('savingsSummary', () => {
     expect(savingsRate(1000, 4000)).toBe(0.25)
     expect(savingsRate(-1000, 4000)).toBe(-0.25)
     expect(savingsRate(1000, 0)).toBeNull()
+  })
+})
+
+describe('monthYield', () => {
+  const buy = (occurredOn: string, cents: number) => ({ type: 'BUY', occurredOn, amountCents: cents, netAmountCents: cents })
+  const sell = (occurredOn: string, gross: number, net: number) => ({ type: 'SELL', occurredOn, amountCents: gross, netAmountCents: net })
+
+  it('mês inteiro: da última foto do mês anterior à última do mês', () => {
+    const snaps = [
+      { day: '2026-10-20', investmentsCents: 900000 },
+      { day: '2026-10-31', investmentsCents: 1000000 },
+      { day: '2026-11-15', investmentsCents: 1004000 },
+      { day: '2026-11-30', investmentsCents: 1008000 },
+    ]
+    const y = monthYield(snaps, [], '2026-11')!
+    expect(y).toMatchObject({ fromDay: '2026-10-31', toDay: '2026-11-30', partial: false, yieldCents: 8000, flowsCents: 0 })
+    expect(y.percent).toBeCloseTo(0.8, 10)
+  })
+
+  it('aporte e resgate não contam como rendimento', () => {
+    const snaps = [
+      { day: '2026-10-31', investmentsCents: 1000000 },
+      { day: '2026-11-30', investmentsCents: 1458000 },
+    ]
+    // +5.000,00 de aporte e −500,00 de resgate (pelo líquido): rendeu 80,00.
+    const y = monthYield(snaps, [buy('2026-11-10', 500000), sell('2026-11-20', 51000, 50000)], '2026-11')!
+    expect(y.flowsCents).toBe(500000 - 50000)
+    expect(y.yieldCents).toBe(8000)
+  })
+
+  it('Dietz: aporte no fim do período quase não pesa na base', () => {
+    const snaps = [
+      { day: '2026-10-31', investmentsCents: 1000000 },
+      { day: '2026-11-30', investmentsCents: 2010000 },
+    ]
+    // 10.000,00 aportados no último dia: rendeu 100,00 sobre os 10.000,00 de antes.
+    const y = monthYield(snaps, [buy('2026-11-30', 1000000)], '2026-11')!
+    expect(y.yieldCents).toBe(10000)
+    expect(y.percent).toBeCloseTo(1, 10)
+  })
+
+  it('movimentação no dia da foto de início já está nela', () => {
+    const snaps = [
+      { day: '2026-10-31', investmentsCents: 1100000 },
+      { day: '2026-11-30', investmentsCents: 1105000 },
+    ]
+    const y = monthYield(snaps, [buy('2026-10-31', 100000)], '2026-11')!
+    expect(y.flowsCents).toBe(0)
+    expect(y.yieldCents).toBe(5000)
+  })
+
+  it('fotos que começaram no meio do mês: parcial, desde a primeira', () => {
+    const snaps = [
+      { day: '2026-11-11', investmentsCents: 2791031 },
+      { day: '2026-11-12', investmentsCents: 2792000 },
+    ]
+    const y = monthYield(snaps, [], '2026-11')!
+    expect(y).toMatchObject({ partial: true, fromDay: '2026-11-11', toDay: '2026-11-12', yieldCents: 969 })
+  })
+
+  it('sem duas fotos não há rendimento', () => {
+    expect(monthYield([], [], '2026-11')).toBeNull()
+    expect(monthYield([{ day: '2026-11-11', investmentsCents: 1 }], [], '2026-11')).toBeNull()
+    // Só foto do mês anterior: o mês pedido não tem fim.
+    expect(monthYield([{ day: '2026-10-31', investmentsCents: 1 }], [], '2026-11')).toBeNull()
+  })
+
+  it('pode ser negativo (ETF que caiu)', () => {
+    const snaps = [
+      { day: '2026-10-31', investmentsCents: 100000 },
+      { day: '2026-11-30', investmentsCents: 97000 },
+    ]
+    expect(monthYield(snaps, [], '2026-11')!.yieldCents).toBe(-3000)
   })
 })
