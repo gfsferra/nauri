@@ -672,12 +672,18 @@ export function ListRow({
   label,
   detail,
   onPress,
+  trailing,
+  checked,
   last = false,
   destructive = false,
 }: {
   icon?: ReactNode
   label: string
   detail?: string
+  /** Controle no fim da linha (uma chave, por exemplo), no lugar do detalhe. */
+  trailing?: ReactNode
+  /** Linha que liga e desliga algo: o leitor de tela anuncia como chave. */
+  checked?: boolean
   onPress?: () => void
   last?: boolean
   destructive?: boolean
@@ -714,15 +720,56 @@ export function ListRow({
         </View>
       ) : null}
       <Text style={{ ...type.row, color, flex: 1 }}>{label}</Text>
-      {detail ? <Text style={{ ...type.caption, color: theme.text2 }}>{detail}</Text> : null}
+      {trailing ?? (detail ? <Text style={{ ...type.caption, color: theme.text2 }}>{detail}</Text> : null)}
     </View>
   )
 
   if (!onPress) return body(false)
   return (
-    <Pressable onPress={onPress} accessibilityRole="button">
+    <Pressable
+      onPress={onPress}
+      accessibilityRole={checked === undefined ? 'button' : 'switch'}
+      accessibilityLabel={label}
+      accessibilityState={checked === undefined ? undefined : { checked }}
+      aria-checked={checked}
+    >
       {({ pressed }) => body(pressed)}
     </Pressable>
+  )
+}
+
+/**
+ * Chave liga/desliga do DS, igual nas três plataformas. O `Switch` nativo
+ * na web pinta a bolinha de verde-água quando ligada e não segue o tema.
+ * Só desenha: quem recebe o toque é a linha inteira (ver `ListRow`).
+ */
+export function Toggle({ value }: { value: boolean }) {
+  const theme = useTheme()
+  const x = useRef(new Animated.Value(value ? 1 : 0)).current
+  useEffect(() => {
+    Animated.spring(x, { toValue: value ? 1 : 0, useNativeDriver: true, speed: 22, bounciness: 5 }).start()
+  }, [value, x])
+  return (
+    <View
+      style={{
+        width: 46,
+        height: 28,
+        borderRadius: radius.full,
+        padding: 3,
+        backgroundColor: value ? theme.accent : theme.track,
+      }}
+    >
+      <Animated.View
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: radius.full,
+          backgroundColor: '#FFFFFF',
+          ...(Platform.OS === 'web' ? ({ boxShadow: '0 1px 3px rgba(15,23,42,0.25)' } as object) : null),
+          transform: [{ translateX: x.interpolate({ inputRange: [0, 1], outputRange: [0, 18] }) }],
+        }}
+      />
+    </View>
   )
 }
 
