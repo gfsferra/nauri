@@ -27,6 +27,7 @@ import {
 } from '@/components/ui'
 import { CountUp, Figure, Segmented } from '@/components/metrics'
 import { MonthStrip } from '@/components/month-strip'
+import { openTransaction } from '@/components/transaction-sheet'
 import { client, unwrap } from '@/lib/api'
 import { useSelectedMonth } from '@/lib/month'
 import {
@@ -940,16 +941,19 @@ function CategoryTransactions({
       ) : (
         <>
           {shown.map((tx) => (
-            <View
+            <Pressable
               key={tx.id}
-              style={{
+              onPress={() => openTransaction(tx)}
+              accessibilityRole="button"
+              style={({ pressed }) => ({
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: spacing.sm,
                 paddingVertical: 8,
                 borderTopWidth: 1,
                 borderTopColor: theme.border,
-              }}
+                opacity: pressed ? 0.6 : 1,
+              })}
             >
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={{ ...type.body, fontWeight: '500', color: theme.text }} numberOfLines={1}>
@@ -969,7 +973,7 @@ function CategoryTransactions({
                 {kind === 'income' ? '+ ' : ''}
                 {mask(formatBRL(tx.amountCents), hidden)}
               </Text>
-            </View>
+            </Pressable>
           ))}
           {rest > 0 || all ? (
             <Pressable
@@ -1004,9 +1008,11 @@ function Largest({ items, total, kind, hidden }: { items: Tx[]; total: number; k
       </Text>
       <Card style={{ paddingVertical: 4, paddingHorizontal: 14 }}>
         {items.map((tx, i) => (
-          <View
+          <Pressable
             key={tx.id}
-            style={{
+            onPress={() => openTransaction(tx)}
+            accessibilityRole="button"
+            style={({ pressed }) => ({
               flexDirection: 'row',
               alignItems: 'center',
               gap: spacing.md,
@@ -1014,7 +1020,8 @@ function Largest({ items, total, kind, hidden }: { items: Tx[]; total: number; k
               paddingVertical: 8,
               borderTopWidth: i === 0 ? 0 : 1,
               borderTopColor: theme.border,
-            }}
+              opacity: pressed ? 0.6 : 1,
+            })}
           >
             <CategoryIcon icon={tx.categoryIcon} color={tx.categoryColor} size={38} />
             <View style={{ flex: 1, minWidth: 0 }}>
@@ -1041,7 +1048,7 @@ function Largest({ items, total, kind, hidden }: { items: Tx[]; total: number; k
                 </Text>
               ) : null}
             </View>
-          </View>
+          </Pressable>
         ))}
       </Card>
     </View>

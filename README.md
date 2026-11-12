@@ -139,6 +139,12 @@ exige o plano pago da Pluggy.
   da Pluggy (virou definitiva com outro ID) é removida.
 - **Edições do usuário:** a sincronização atualiza só valor, data e status;
   categoria e descrição editadas ficam como estão.
+- **Regras de categoria:** "Sempre usar para *descrição*", no detalhe do
+  lançamento, grava uma regra em `category_rules` (descrição normalizada, sem
+  acento, caixa nem número de parcela) e troca o histórico na hora. Todo
+  lançamento novo que a sincronização insere passa pelas regras antes da
+  categoria sugerida pela Pluggy. Isso cobre também a compra pendente que
+  volta definitiva com outro ID.
 - **Exclusões:** um lançamento do banco apagado pelo usuário vai para
   `open_finance_ignored` e não volta.
 

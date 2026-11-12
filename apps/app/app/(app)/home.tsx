@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef } from 'react'
-import { Alert, Animated, Easing, PanResponder, Pressable, SectionList, Text, View } from 'react-native'
+import { Animated, Easing, PanResponder, Pressable, SectionList, Text, View } from 'react-native'
 import {
   Amount,
   BankLogo,
@@ -19,6 +19,7 @@ import {
   EyeToggle,
 } from '@/components/ui'
 import { MonthStrip } from '@/components/month-strip'
+import { openTransaction } from '@/components/transaction-sheet'
 import { client, unwrap } from '@/lib/api'
 import { useSelectedMonth } from '@/lib/month'
 import { useHidden } from '@/lib/privacy'
@@ -40,6 +41,8 @@ type Row = {
   categoryName: string
   categoryColor: string
   categoryIcon?: string | null
+  categoryId?: string
+  fromBank?: boolean
   /** Compra do cartão que ainda não fechou na fatura (veio do Open Finance). */
   isPending?: boolean
   /** Salário ou conta fixa prevista que ainda não aconteceu: calculado, não é lançamento. */
@@ -49,7 +52,6 @@ type Row = {
 export default function Home() {
   const theme = useTheme()
   const tabBarSpace = useTabBarSpace()
-  const queryClient = useQueryClient()
 
   // O mês é o mesmo em todas as abas (lib/month).
   const [month, setMonth] = useSelectedMonth()
@@ -114,20 +116,11 @@ export default function Home() {
       unwrap(await client.transactions.$get({ query: { from, to, limit: '100' } })),
   })
 
-  const remove = useMutation({
-    mutationFn: async (id: string) =>
-      unwrap(await client.transactions[':id'].$delete({ param: { id } })),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['transactions', month] })
-      queryClient.invalidateQueries({ queryKey: ['summary'] })
-    },
-  })
-
-  function confirmRemove(row: Row) {
-    Alert.alert('Excluir lançamento', `"${row.description || row.categoryName}" será removido.`, [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Excluir', style: 'destructive', onPress: () => remove.mutate(row.id) },
-    ])
+  // Tocar abre o detalhe: trocar a categoria, criar a regra ou excluir. O
+  // "segurar para excluir" usava o Alert, que não faz nada na web.
+  function open(row: Row) {
+    if (row.isForecast || !row.categoryId) return
+    openTransaction({ ...row, categoryId: row.categoryId })
   }
 
   // O extrato do DS é agrupado por dia, com 'Hoje' e 'Ontem' à frente.
@@ -296,9 +289,11 @@ export default function Home() {
         }
         renderItem={({ item }) => (
           <Pressable
-            // A previsão não é lançamento: não há o que excluir.
-            onLongPress={item.isForecast ? undefined : () => confirmRemove(item)}
-            accessibilityHint={item.isForecast ? undefined : 'Toque e segure para excluir'}
+            // A previsão não é lançamento: não há o que abrir.
+            onPress={item.isForecast ? undefined : () => open(item)}
+            disabled={item.isForecast}
+            accessibilityRole={item.isForecast ? undefined : 'button'}
+            accessibilityHint={item.isForecast ? undefined : 'Abre o detalhe para trocar a categoria'}
             style={({ pressed }) => ({ opacity: item.isForecast ? 0.55 : pressed ? 0.6 : 1 })}
           >
             <Gutter
