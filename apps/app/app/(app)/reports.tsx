@@ -18,9 +18,12 @@ import {
   CategoryIcon,
   EmptyState,
   ErrorBanner,
+  EyeToggle,
   Gutter,
   Screen,
   Skeleton,
+  SkeletonRow,
+  mask,
   useTabBarSpace,
 } from '@/components/ui'
 import { MonthStrip } from '@/components/month-strip'
@@ -33,8 +36,10 @@ import {
   formatMonth,
   monthBounds,
   percentDelta,
+  relativeDay,
   today,
 } from '@/lib/format'
+import { useHidden } from '@/lib/privacy'
 import { radius, spacing, tabular, type, useTheme } from '@/lib/theme'
 
 type Kind = 'expense' | 'income'
@@ -50,6 +55,32 @@ const shortMonth = (month: string) => formatMonth(month).slice(0, 3)
 /** "R$ 1.234,56" sem os centavos, para rótulo de gráfico e frase. */
 const roundBRL = (cents: number) => formatBRL(Math.round(cents / 100) * 100).replace(/,00$/, '')
 
+/** Teto de páginas de 100 ao trazer os lançamentos do mês: 1.000 por mês. */
+const MAX_PAGES = 10
+
+async function fetchPage(query: { from: string; to: string; kind: Kind; cursor?: string }) {
+  return unwrap(await client.transactions.$get({ query: { ...query, limit: '100' } }))
+}
+type Tx = Awaited<ReturnType<typeof fetchPage>>['items'][number]
+
+/**
+ * Todos os lançamentos do mês de um tipo. A API pagina de 100 em 100; aqui as
+ * páginas são juntadas, porque "os maiores do mês" precisa ver o mês inteiro,
+ * e não só os 100 mais recentes.
+ */
+async function fetchMonth(month: string, kind: Kind): Promise<Tx[]> {
+  const { from, to } = monthBounds(month)
+  const items: Tx[] = []
+  let cursor: string | undefined
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const result = await fetchPage({ from, to, kind, ...(cursor ? { cursor } : {}) })
+    items.push(...result.items)
+    if (!result.nextCursor) break
+    cursor = result.nextCursor
+  }
+  return items
+}
+
 export default function Reports() {
   const theme = useTheme()
   const tabBarSpace = useTabBarSpace()
@@ -57,6 +88,9 @@ export default function Reports() {
 
   const [month, setMonth] = useState(now)
   const [kind, setKind] = useState<Kind>('expense')
+  const [hidden] = useHidden()
+  /** Valor em reais, ou bolinhas quando o olho está fechado. */
+  const brl = (cents: number) => mask(formatBRL(cents), hidden)
   const previous = addMonths(month, -1)
   // No mês corrente, o anterior entra só até o mesmo dia: comparar 11 dias de
   // novembro com outubro inteiro faria todo mês parecer econômico.
@@ -129,6 +163,12 @@ export default function Reports() {
     queryKey: ['summary', now],
     queryFn: async () => unwrap(await client.reports.summary.$get({ query: { month: now } })),
   })
+  // Os lançamentos do mês alimentam a categoria aberta e os maiores do mês.
+  // A chave começa como a da Início: excluir um lançamento lá invalida aqui.
+  const txs = useQuery({
+    queryKey: ['transactions', month, 'all', kind],
+    queryFn: () => fetchMonth(month, kind),
+  })
   const monthly = useQuery({
     queryKey: ['monthly', HISTORY],
     queryFn: async () => unwrap(await client.reports.monthly.$get({ query: { months: String(HISTORY) } })),
@@ -179,8 +219,35 @@ export default function Reports() {
   /* A categoria em foco na rosca. Começa na maior e volta a ela a cada troca
      de mês ou de tipo. */
   const [focus, setFocus] = useState<string | null>(null)
-  useEffect(() => setFocus(null), [month, kind])
+  // A categoria aberta, com os lançamentos dela à mostra.
+  const [open, setOpen] = useState<string | null>(null)
+  useEffect(() => {
+    setFocus(null)
+    setOpen(null)
+  }, [month, kind])
   const focused = rows.find((r) => r.categoryId === focus) ?? rows[0] ?? null
+  function pick(id: string) {
+    // O primeiro toque já foca e abre; tocar de novo na aberta fecha.
+    if (focused?.categoryId === id) setOpen(open === id ? null : id)
+    else {
+      setFocus(id)
+      setOpen(id)
+    }
+  }
+
+  const txsByCategory = useMemo(() => {
+    const map = new Map<string, Tx[]>()
+    for (const tx of txs.data ?? []) {
+      const list = map.get(tx.categoryId)
+      if (list) list.push(tx)
+      else map.set(tx.categoryId, [tx])
+    }
+    return map
+  }, [txs.data])
+  const largest = useMemo(
+    () => [...(txs.data ?? [])].sort((a, b) => b.amountCents - a.amountCents).slice(0, 5),
+    [txs.data],
+  )
 
   const insights = useMemo(
     () =>
@@ -192,13 +259,15 @@ export default function Reports() {
         month,
         now,
         forecast,
+        money: (cents: number) => mask(roundBRL(cents), hidden),
         against: partial ? `1 a ${Math.min(day, Number(monthBounds(previous).to.slice(8, 10)))} de ${monthName(previous)}` : monthName(previous),
       }),
-    [rows, beforeById, total, kind, month, now, forecast, previous, partial, day],
+    [rows, beforeById, total, kind, month, now, forecast, previous, partial, day, hidden],
   )
 
   const loading = byCategory.isPending
-  const error = byCategory.error?.message ?? summary.error?.message ?? monthly.error?.message
+  const error =
+    byCategory.error?.message ?? summary.error?.message ?? monthly.error?.message ?? txs.error?.message
 
   return (
     <Screen>
@@ -212,6 +281,7 @@ export default function Reports() {
               byCategoryBefore.refetch()
               summary.refetch()
               monthly.refetch()
+              txs.refetch()
             }}
           />
         }
@@ -234,17 +304,23 @@ export default function Reports() {
             <Text style={{ ...type.caption, color: theme.text2 }}>
               {kind === 'expense' ? 'Gastos' : 'Entradas'} em {monthName(month)}
             </Text>
-            {loading ? (
-              <Skeleton width={220} height={38} style={{ borderRadius: 10, marginTop: 6 }} />
-            ) : (
-              <CountUp cents={total} />
-            )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                {loading ? (
+                  <Skeleton width={220} height={38} style={{ borderRadius: 10, marginTop: 6 }} />
+                ) : (
+                  <CountUp cents={total} hidden={hidden} />
+                )}
+              </View>
+              {/* O mesmo olho da Início, e o mesmo estado: esconder lá esconde aqui. */}
+              <EyeToggle />
+            </View>
 
             <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: 10 }}>
               {delta !== null ? <DeltaPill delta={delta} kind={kind} against={against} /> : null}
               {forecast > 0 ? (
                 <Text style={{ ...type.caption, color: theme.text2 }}>
-                  + <Text style={[{ fontWeight: '600', color: theme.text }, tabular]}>{formatBRL(forecast)}</Text>{' '}
+                  + <Text style={[{ fontWeight: '600', color: theme.text }, tabular]}>{brl(forecast)}</Text>{' '}
                   {kind === 'expense' ? 'previstos até o fim do mês' : 'previstos para cair'}
                 </Text>
               ) : null}
@@ -252,14 +328,14 @@ export default function Reports() {
 
             <View style={{ flexDirection: 'row', gap: spacing.xl, marginTop: spacing.lg }}>
               {kind === 'expense' ? (
-                <Figure label="Por dia" value={loading ? null : days > 0 ? formatBRL(Math.round(total / days)) : '—'} />
+                <Figure label="Por dia" value={loading ? null : days > 0 ? brl(Math.round(total / days)) : '—'} />
               ) : (
                 // Nas entradas, a média por dia não diz nada; o que sobrou, sim.
                 <Figure
                   label="Sobrou no mês"
                   value={
                     summary.data
-                      ? `${summary.data.balanceCents < 0 ? '−' : ''}${formatBRL(Math.abs(summary.data.balanceCents))}`
+                      ? `${summary.data.balanceCents < 0 ? '−' : ''}${brl(Math.abs(summary.data.balanceCents))}`
                       : null
                   }
                 />
@@ -275,9 +351,16 @@ export default function Reports() {
           <Card>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
               <Text style={{ ...type.section, color: theme.text }}>Últimos 12 meses</Text>
-              <TrendAverage trend={trend} now={now} />
+              <TrendAverage trend={trend} now={now} hidden={hidden} />
             </View>
-            <TrendChart trend={trend} selected={month} now={now} loading={monthly.isPending} onPick={goTo} />
+            <TrendChart
+              trend={trend}
+              selected={month}
+              now={now}
+              loading={monthly.isPending}
+              hidden={hidden}
+              onPick={goTo}
+            />
           </Card>
 
           {/* ── destaques ── */}
@@ -328,7 +411,7 @@ export default function Reports() {
                   {kind === 'expense' ? 'Para onde foi' : 'De onde veio'}
                 </Text>
                 <Text style={{ ...type.caption, color: theme.text2, marginTop: 2 }}>
-                  Toque numa categoria para ver a fatia dela
+                  Toque numa categoria para ver os lançamentos dela
                 </Text>
               </View>
 
@@ -336,6 +419,7 @@ export default function Reports() {
                 rows={rows}
                 total={total}
                 focused={focused}
+                hidden={hidden}
                 revealKey={`${month}:${kind}`}
               />
 
@@ -350,7 +434,10 @@ export default function Reports() {
                     against={against}
                     kind={kind}
                     selected={focused?.categoryId === row.categoryId}
-                    onPress={() => setFocus(row.categoryId)}
+                    expanded={open === row.categoryId}
+                    transactions={txs.isPending ? null : (txsByCategory.get(row.categoryId) ?? [])}
+                    hidden={hidden}
+                    onPress={() => pick(row.categoryId)}
                     index={i}
                     revealKey={`${month}:${kind}`}
                   />
@@ -358,6 +445,17 @@ export default function Reports() {
               </View>
             </Card>
           )}
+
+          {/* ── os maiores do mês ── */}
+          {txs.isPending ? (
+            <Card style={{ gap: spacing.sm }}>
+              {[0, 1, 2].map((i) => (
+                <SkeletonRow key={i} delay={i * 100} />
+              ))}
+            </Card>
+          ) : largest.length ? (
+            <Largest items={largest} total={total} kind={kind} hidden={hidden} />
+          ) : null}
         </Gutter>
       </ScrollView>
     </Screen>
@@ -442,17 +540,17 @@ function useTween(target: number, duration = 620): number {
 /* ─────────────────────────────── topo ─────────────────────────────── */
 
 /** O total do mês, contando até o valor novo. */
-function CountUp({ cents }: { cents: number }) {
+function CountUp({ cents, hidden }: { cents: number; hidden: boolean }) {
   const theme = useTheme()
   const value = useTween(cents)
   return (
     <Text
-      accessibilityLabel={formatBRL(cents)}
+      accessibilityLabel={hidden ? 'Valor oculto' : formatBRL(cents)}
       numberOfLines={1}
       adjustsFontSizeToFit
       style={[type.balance, tabular, { color: theme.text, marginTop: 4 }]}
     >
-      {formatBRL(Math.round(value))}
+      {mask(formatBRL(Math.round(value)), hidden)}
     </Text>
   )
 }
@@ -603,13 +701,13 @@ function averageOf(trend: TrendPoint[], now: string): number {
   return past.length ? past.reduce((s, p) => s + p.cents, 0) / past.length : 0
 }
 
-function TrendAverage({ trend, now }: { trend: TrendPoint[]; now: string }) {
+function TrendAverage({ trend, now, hidden }: { trend: TrendPoint[]; now: string; hidden: boolean }) {
   const theme = useTheme()
   const average = averageOf(trend, now)
   if (!average) return null
   return (
     <Text style={{ ...type.caption, color: theme.text2 }}>
-      média <Text style={[{ fontWeight: '600', color: theme.text }, tabular]}>{roundBRL(average)}</Text>
+      média <Text style={[{ fontWeight: '600', color: theme.text }, tabular]}>{mask(roundBRL(average), hidden)}</Text>
     </Text>
   )
 }
@@ -631,12 +729,14 @@ function TrendChart({
   selected,
   now,
   loading,
+  hidden,
   onPick,
 }: {
   trend: TrendPoint[]
   selected: string
   now: string
   loading: boolean
+  hidden: boolean
   onPick: (month: string) => void
 }) {
   const theme = useTheme()
@@ -699,7 +799,7 @@ function TrendChart({
               key={p.month}
               onPress={() => onPick(p.month)}
               accessibilityRole="button"
-              accessibilityLabel={`${formatMonth(p.month)}: ${formatBRL(p.cents)}`}
+              accessibilityLabel={`${formatMonth(p.month)}: ${hidden ? 'valor oculto' : formatBRL(p.cents)}`}
               style={{ flex: 1 }}
             />
           ))}
@@ -760,11 +860,13 @@ function Donut({
   rows,
   total,
   focused,
+  hidden,
   revealKey,
 }: {
   rows: Row[]
   total: number
   focused: Row | null
+  hidden: boolean
   revealKey: string
 }) {
   const theme = useTheme()
@@ -840,7 +942,7 @@ function Donut({
                 {Math.round(shownShare)}%
               </Text>
               <Text style={[{ ...type.caption, fontWeight: '600', color: theme.text2 }, tabular]} numberOfLines={1}>
-                {formatBRL(focused.totalCents)}
+                {mask(formatBRL(focused.totalCents), hidden)}
               </Text>
             </>
           ) : null}
@@ -860,6 +962,9 @@ function CategoryRow({
   against,
   kind,
   selected,
+  expanded,
+  transactions,
+  hidden,
   onPress,
   index,
   revealKey,
@@ -871,6 +976,10 @@ function CategoryRow({
   against: string
   kind: Kind
   selected: boolean
+  expanded: boolean
+  /** Os lançamentos da categoria no mês; `null` enquanto carregam. */
+  transactions: Tx[] | null
+  hidden: boolean
   onPress: () => void
   index: number
   revealKey: string
@@ -891,51 +1000,232 @@ function CategoryRow({
     }
   }
 
+  // A seta gira meia volta ao abrir.
+  const turn = useRef(new Animated.Value(expanded ? 1 : 0)).current
+  useEffect(() => {
+    Animated.timing(turn, { toValue: expanded ? 1 : 0, duration: 200, useNativeDriver: true }).start()
+  }, [expanded, turn])
+
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      accessibilityLabel={`${row.categoryName}, ${formatBRL(row.totalCents)}, ${Math.round(share * 100)}%`}
-      style={({ pressed }) => ({
+    <View
+      style={{
         marginHorizontal: spacing.sm,
-        paddingHorizontal: 10,
-        paddingVertical: 10,
         borderRadius: radius.lg,
-        backgroundColor: selected ? theme.accentSoft : pressed ? theme.surface2 : 'transparent',
-      })}
+        backgroundColor: selected ? theme.accentSoft : 'transparent',
+      }}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-        <CategoryIcon icon={row.categoryIcon} color={row.categoryColor} size={38} />
-        <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm }}>
-            <Text style={{ ...type.row, color: theme.text, flex: 1 }} numberOfLines={1}>
-              {row.categoryName}
-            </Text>
-            <Text style={[{ ...type.amount, color: theme.text }, tabular]}>{formatBRL(row.totalCents)}</Text>
-          </View>
-          <View style={{ height: 5, borderRadius: radius.full, backgroundColor: theme.track, overflow: 'hidden' }}>
-            <View
-              style={{
-                width: `${Math.max(share * 100 * fill, share > 0 ? 1.5 : 0)}%`,
-                height: '100%',
-                borderRadius: radius.full,
-                backgroundColor: selected ? theme.accent : theme.chartRamp[1],
-              }}
-            />
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-            <Text style={{ ...type.caption, color: theme.text2, flex: 1 }} numberOfLines={1}>
-              {row.transactionCount} lançamento{row.transactionCount === 1 ? '' : 's'}
-              {trend ? <Text style={{ color: trend.color }}> · {trend.text}</Text> : null}
-            </Text>
-            <Text style={[{ ...type.caption, fontWeight: '600', color: theme.text2 }, tabular]}>
-              {Math.round(share * 100)}%
-            </Text>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityState={{ selected, expanded }}
+        accessibilityLabel={`${row.categoryName}, ${hidden ? 'valor oculto' : formatBRL(row.totalCents)}, ${Math.round(share * 100)}%`}
+        accessibilityHint={expanded ? 'Toque para fechar os lançamentos' : 'Toque para ver os lançamentos'}
+        style={({ pressed }) => ({
+          paddingHorizontal: 10,
+          paddingVertical: 10,
+          borderRadius: radius.lg,
+          backgroundColor: !selected && pressed ? theme.surface2 : 'transparent',
+        })}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+          <CategoryIcon icon={row.categoryIcon} color={row.categoryColor} size={38} />
+          <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm }}>
+              <Text style={{ ...type.row, color: theme.text, flex: 1 }} numberOfLines={1}>
+                {row.categoryName}
+              </Text>
+              <Text style={[{ ...type.amount, color: theme.text }, tabular]}>
+                {mask(formatBRL(row.totalCents), hidden)}
+              </Text>
+            </View>
+            <View style={{ height: 5, borderRadius: radius.full, backgroundColor: theme.track, overflow: 'hidden' }}>
+              <View
+                style={{
+                  width: `${Math.max(share * 100 * fill, share > 0 ? 1.5 : 0)}%`,
+                  height: '100%',
+                  borderRadius: radius.full,
+                  backgroundColor: selected ? theme.accent : theme.chartRamp[1],
+                }}
+              />
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={{ ...type.caption, color: theme.text2, flex: 1 }} numberOfLines={1}>
+                {row.transactionCount} lançamento{row.transactionCount === 1 ? '' : 's'}
+                {trend ? <Text style={{ color: trend.color }}> · {trend.text}</Text> : null}
+              </Text>
+              <Text style={[{ ...type.caption, fontWeight: '600', color: theme.text2 }, tabular]}>
+                {Math.round(share * 100)}%
+              </Text>
+              <Animated.View
+                style={{
+                  transform: [{ rotate: turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }],
+                }}
+              >
+                <Ionicons name="chevron-down" size={14} color={selected ? theme.accentText : theme.text3} />
+              </Animated.View>
+            </View>
           </View>
         </View>
-      </View>
-    </Pressable>
+      </Pressable>
+
+      {expanded ? <CategoryTransactions transactions={transactions} kind={kind} hidden={hidden} /> : null}
+    </View>
+  )
+}
+
+/** Quantos lançamentos a categoria aberta mostra antes do "mostrar mais". */
+const PREVIEW = 5
+
+/**
+ * Os lançamentos da categoria aberta, do mais recente para o mais antigo. A
+ * lista fica recuada até o texto da linha, para ler como parte dela.
+ */
+function CategoryTransactions({
+  transactions,
+  kind,
+  hidden,
+}: {
+  transactions: Tx[] | null
+  kind: Kind
+  hidden: boolean
+}) {
+  const theme = useTheme()
+  const [all, setAll] = useState(false)
+  const rise = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    Animated.timing(rise, { toValue: 1, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start()
+  }, [rise])
+
+  const shown = transactions ? (all ? transactions : transactions.slice(0, PREVIEW)) : []
+  const rest = transactions ? transactions.length - shown.length : 0
+
+  return (
+    <Animated.View
+      style={{
+        opacity: rise,
+        transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [-6, 0] }) }],
+        paddingLeft: 60,
+        paddingRight: 10,
+        paddingBottom: 8,
+      }}
+    >
+      {transactions === null ? (
+        <View style={{ gap: 10, paddingVertical: 8 }}>
+          <Skeleton width="80%" height={10} />
+          <Skeleton width="60%" height={10} delay={90} />
+        </View>
+      ) : transactions.length === 0 ? (
+        <Text style={{ ...type.caption, color: theme.text2, paddingVertical: 8 }}>
+          Nenhum lançamento encontrado.
+        </Text>
+      ) : (
+        <>
+          {shown.map((tx) => (
+            <View
+              key={tx.id}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.sm,
+                paddingVertical: 8,
+                borderTopWidth: 1,
+                borderTopColor: theme.border,
+              }}
+            >
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ ...type.body, fontWeight: '500', color: theme.text }} numberOfLines={1}>
+                  {tx.description || 'Sem descrição'}
+                </Text>
+                <Text style={{ ...type.caption, color: theme.text2, marginTop: 1 }} numberOfLines={1}>
+                  {relativeDay(tx.occurredOn)}
+                  {tx.isPending ? ' · pendente' : ''}
+                </Text>
+              </View>
+              <Text
+                style={[
+                  { ...type.body, fontWeight: '600', color: kind === 'income' ? theme.positive : theme.text },
+                  tabular,
+                ]}
+              >
+                {kind === 'income' ? '+ ' : ''}
+                {mask(formatBRL(tx.amountCents), hidden)}
+              </Text>
+            </View>
+          ))}
+          {rest > 0 || all ? (
+            <Pressable
+              onPress={() => setAll((v) => !v)}
+              accessibilityRole="button"
+              hitSlop={6}
+              style={{ paddingVertical: 8, borderTopWidth: 1, borderTopColor: theme.border }}
+            >
+              <Text style={{ ...type.caption, fontWeight: '600', color: theme.accentText }}>
+                {all ? 'Mostrar menos' : `Mostrar mais ${rest}`}
+              </Text>
+            </Pressable>
+          ) : null}
+        </>
+      )}
+    </Animated.View>
+  )
+}
+
+/* ─────────────────────────── os maiores ──────────────────────────── */
+
+/**
+ * Os cinco maiores lançamentos do mês. A visão por categoria diz para onde o
+ * dinheiro foi; esta diz o que pesou, que a soma por categoria esconde.
+ */
+function Largest({ items, total, kind, hidden }: { items: Tx[]; total: number; kind: Kind; hidden: boolean }) {
+  const theme = useTheme()
+  return (
+    <View style={{ gap: spacing.md }}>
+      <Text style={{ ...type.section, color: theme.text }}>
+        {kind === 'expense' ? 'Maiores gastos' : 'Maiores entradas'}
+      </Text>
+      <Card style={{ paddingVertical: 4, paddingHorizontal: 14 }}>
+        {items.map((tx, i) => (
+          <View
+            key={tx.id}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.md,
+              minHeight: 60,
+              paddingVertical: 8,
+              borderTopWidth: i === 0 ? 0 : 1,
+              borderTopColor: theme.border,
+            }}
+          >
+            <CategoryIcon icon={tx.categoryIcon} color={tx.categoryColor} size={38} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={{ ...type.row, color: theme.text }} numberOfLines={1}>
+                {tx.description || tx.categoryName}
+              </Text>
+              <Text style={{ ...type.caption, color: theme.text2, marginTop: 2 }} numberOfLines={1}>
+                {tx.categoryName} · {relativeDay(tx.occurredOn)}
+              </Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text
+                style={[
+                  { ...type.amount, color: kind === 'income' ? theme.positive : theme.text },
+                  tabular,
+                ]}
+              >
+                {kind === 'income' ? '+ ' : ''}
+                {mask(formatBRL(tx.amountCents), hidden)}
+              </Text>
+              {total > 0 ? (
+                <Text style={[{ ...type.caption, color: theme.text2, marginTop: 2 }, tabular]}>
+                  {Math.max(1, Math.round((tx.amountCents / total) * 100))}% do mês
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        ))}
+      </Card>
+    </View>
   )
 }
 
@@ -961,6 +1251,7 @@ function buildInsights({
   month,
   now,
   forecast,
+  money,
   against,
 }: {
   rows: Row[]
@@ -970,6 +1261,8 @@ function buildInsights({
   month: string
   now: string
   forecast: number
+  /** Reais arredondados, ou bolinhas com o olho fechado. */
+  money: (cents: number) => string
   /** 'outubro', ou '1 a 11 de outubro' no mês corrente. */
   against: string
 }): Insight[] {
@@ -981,8 +1274,8 @@ function buildInsights({
       key: 'fecha',
       icon: 'flag-outline',
       tone: 'accent',
-      title: `${kind === 'expense' ? 'O mês deve fechar' : 'As entradas devem chegar'} em ${roundBRL(total + forecast)}`,
-      detail: `${roundBRL(total)} até agora e ${roundBRL(forecast)} ${kind === 'expense' ? 'em contas previstas' : 'previstos'}.`,
+      title: `${kind === 'expense' ? 'O mês deve fechar' : 'As entradas devem chegar'} em ${money(total + forecast)}`,
+      detail: `${money(total)} até agora e ${money(forecast)} ${kind === 'expense' ? 'em contas previstas' : 'previstos'}.`,
     })
   }
 
@@ -999,7 +1292,7 @@ function buildInsights({
           ? `As 3 maiores categorias somam ${Math.round(
               (rows.slice(0, 3).reduce((s, r) => s + r.totalCents, 0) / total) * 100,
             )}% ${kind === 'expense' ? 'dos gastos' : 'das entradas'}.`
-          : `${roundBRL(top.totalCents)} em ${top.transactionCount} lançamento${top.transactionCount === 1 ? '' : 's'}.`,
+          : `${money(top.totalCents)} em ${top.transactionCount} lançamento${top.transactionCount === 1 ? '' : 's'}.`,
     })
   }
 
@@ -1015,7 +1308,7 @@ function buildInsights({
         key: 'subiu',
         icon: 'trending-up',
         tone: kind === 'income' ? 'positive' : 'neutral',
-        title: `${up.row.categoryName} subiu ${roundBRL(up.diff)}`,
+        title: `${up.row.categoryName} subiu ${money(up.diff)}`,
         detail: `Em relação a ${against}.`,
       })
     }
@@ -1024,7 +1317,7 @@ function buildInsights({
         key: 'caiu',
         icon: 'trending-down',
         tone: kind === 'expense' ? 'positive' : 'neutral',
-        title: `${down.row.categoryName} caiu ${roundBRL(-down.diff)}`,
+        title: `${down.row.categoryName} caiu ${money(-down.diff)}`,
         detail: `Em relação a ${against}.`,
       })
     }

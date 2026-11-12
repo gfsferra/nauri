@@ -16,9 +16,11 @@ import {
   mask,
   useTabBarSpace,
   CategoryIcon,
+  EyeToggle,
 } from '@/components/ui'
 import { MonthStrip } from '@/components/month-strip'
 import { client, unwrap } from '@/lib/api'
+import { useHidden } from '@/lib/privacy'
 import {
   addMonths,
   currentMonth,
@@ -27,7 +29,7 @@ import {
   monthBounds,
   relativeDay,
 } from '@/lib/format'
-import { radius, spacing, tabular, type, useTheme } from '@/lib/theme'
+import { spacing, tabular, type, useTheme } from '@/lib/theme'
 
 type Row = {
   id: string
@@ -50,7 +52,7 @@ export default function Home() {
   const queryClient = useQueryClient()
 
   const [month, setMonth] = useState(currentMonth())
-  const [hidden, setHidden] = useState(false)
+  const [hidden] = useHidden()
 
   // Trocar de mês desliza o saldo no sentido da troca: o mês seguinte entra
   // pela direita, o anterior pela esquerda.
@@ -196,16 +198,7 @@ export default function Home() {
                   )}
                 </View>
                 {/* O olho fica ao lado do valor que ele esconde. */}
-                <Pressable
-                  onPress={() => setHidden((v) => !v)}
-                  accessibilityRole="button"
-                  accessibilityLabel={hidden ? 'Mostrar valores' : 'Ocultar valores'}
-                  accessibilityState={{ checked: hidden }}
-                  hitSlop={8}
-                  style={styles.iconButton}
-                >
-                  <Ionicons name={hidden ? 'eye-off-outline' : 'eye-outline'} size={22} color={theme.text2} />
-                </Pressable>
+                <EyeToggle />
               </View>
               {/* O saldo já conta o salário a cair e as contas fixas a cobrar:
                   sem isso, todo começo de mês parece negativo. Os valores
@@ -370,12 +363,3 @@ function Flow({
   )
 }
 
-const styles = {
-  iconButton: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.md,
-  },
-} as const
