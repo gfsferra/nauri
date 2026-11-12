@@ -8,12 +8,10 @@ import { openFinanceConfig, syncOpenFinance } from './lib/open-finance-sync.js'
 import { translateRateLimit } from './lib/rate-limit.js'
 import { withServices } from './middleware.js'
 import { accountRoute } from './routes/account.js'
-import { budgetsRoute } from './routes/budgets.js'
 import { categoriesRoute } from './routes/categories.js'
 import { importRoute } from './routes/import.js'
 import { investmentsRoute } from './routes/investments.js'
 import { openFinanceRoute } from './routes/open-finance.js'
-import { recurrencesRoute } from './routes/recurrences.js'
 import { reportsRoute } from './routes/reports.js'
 import { transactionsRoute } from './routes/transactions.js'
 
@@ -70,8 +68,6 @@ const routes = app
   .route('/api/categories', categoriesRoute)
   .route('/api/transactions', transactionsRoute)
   .route('/api/reports', reportsRoute)
-  .route('/api/recurrences', recurrencesRoute)
-  .route('/api/budgets', budgetsRoute)
   .route('/api/import', importRoute)
   .route('/api/account', accountRoute)
   .route('/api/open-finance', openFinanceRoute)

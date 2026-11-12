@@ -57,6 +57,13 @@
       "when": 1794410821822,
       "tag": "0007_investments_movements_status",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794445832863,
+      "tag": "0008_remove_recorrencias_orcamentos",
+      "breakpoints": true
     }
   ]
 }

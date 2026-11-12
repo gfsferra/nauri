@@ -22,7 +22,7 @@ const sections: LegalSection[] = [
       {
         list: [
           'Dados de cadastro: nome, e-mail e senha. A senha nunca é guardada como texto: guardamos apenas um resumo criptográfico (hash) dela, que não permite recuperá-la.',
-          'Dados financeiros que você mesmo registra: lançamentos (valor, data, descrição e categoria), categorias, lançamentos recorrentes e orçamentos.',
+          'Dados financeiros que você mesmo registra: lançamentos (valor, data, descrição e categoria) e categorias.',
           'Planilhas importadas: o arquivo é lido no seu próprio aparelho e nunca é enviado aos nossos servidores. Só os lançamentos que você confirma na importação são gravados.',
           'Dados técnicos de acesso: endereço IP e identificação do navegador ou aparelho (user agent) de cada sessão aberta, e o endereço IP usado para limitar tentativas de login.',
           'Registros técnicos do servidor (data, hora, endereço acessado e resultado de cada requisição), usados para diagnosticar falhas e ataques.',
@@ -37,7 +37,7 @@ const sections: LegalSection[] = [
     body: [
       {
         list: [
-          'Para prestar o serviço que você contratou: criar e manter sua conta, guardar e mostrar seus lançamentos, relatórios e orçamentos (execução de contrato, art. 7º, V, da LGPD).',
+          'Para prestar o serviço que você contratou: criar e manter sua conta, guardar e mostrar seus lançamentos e relatórios (execução de contrato, art. 7º, V, da LGPD).',
           'Para enviar e-mails necessários ao uso da conta: confirmação de cadastro e redefinição de senha (execução de contrato). Não enviamos publicidade.',
           'Para proteger a sua conta e o serviço: autenticação, limite de tentativas de login e investigação de abusos (legítimo interesse, art. 7º, IX, e execução de contrato).',
           'Para cumprir obrigações legais ou ordens de autoridades competentes, quando houver (art. 7º, II).',

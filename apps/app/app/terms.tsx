@@ -1,7 +1,7 @@
 import { LEGAL_CONTACT, LegalPage, type LegalSection } from '@/components/legal'
 
 /* Ao mudar este texto, atualize UPDATED_AT e avise os usuários (seção 10). */
-const UPDATED_AT = '10 de novembro de 2026'
+const UPDATED_AT = '11 de novembro de 2026'
 
 const sections: LegalSection[] = [
   {
@@ -13,7 +13,7 @@ const sections: LegalSection[] = [
   {
     title: 'O que é o Nauri',
     body: [
-      'O Nauri é uma ferramenta para organizar as suas finanças pessoais: você registra receitas e despesas, separa por categoria, acompanha orçamentos e vê relatórios.',
+      'O Nauri é uma ferramenta para organizar as suas finanças pessoais: você registra receitas e despesas, separa por categoria e vê relatórios.',
       'O Nauri não é um banco nem uma instituição de pagamento: não guarda, não movimenta e não investe dinheiro, e não se conecta à sua conta bancária. Também não é consultoria financeira, contábil, fiscal ou de investimentos. Os números mostrados dependem do que você registra e servem para a sua organização, não como recomendação.',
     ],
   },

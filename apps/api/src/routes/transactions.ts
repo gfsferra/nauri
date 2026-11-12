@@ -9,7 +9,6 @@ import { z } from 'zod'
 import type { Db } from '../db/client.js'
 import { budgetDate, categories, openFinanceIgnored, transactions } from '../db/schema.js'
 import type { AppContext } from '../env.js'
-import { materializeRecurrences } from '../lib/materialize.js'
 import { requireAuth } from '../middleware.js'
 
 const idParam = z.object({ id: z.uuid() })
@@ -49,12 +48,6 @@ export const transactionsRoute = new Hono<AppContext>()
     const { from, to, kind, categoryId, cursor, limit } = c.req.valid('query')
     const userId = c.get('userId')
 
-    // Só na primeira página: repetir isso a cada página paginada seria trabalho
-    // puro, já que a materialização é idempotente e o período não muda.
-    if (from && to && !cursor) {
-      await materializeRecurrences(c.get('db'), userId, from, to)
-    }
-
     const filters: SQL[] = [eq(transactions.userId, userId)]
     // O mês do orçamento, não o da compra: a parcela de 31/10 que vai na
     // fatura de dezembro aparece (e soma) em novembro. Ver `budgetDate`.
@@ -85,7 +78,6 @@ export const transactionsRoute = new Hono<AppContext>()
         categoryName: categories.name,
         categoryColor: categories.color,
         categoryIcon: categories.icon,
-        recurrenceId: transactions.recurrenceId,
         isPending: transactions.isPending,
         fromBank: sql<boolean>`${transactions.externalId} IS NOT NULL`,
       })

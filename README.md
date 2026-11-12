@@ -25,9 +25,6 @@ Mudar o formato de uma resposta na API quebra o `tsc` do app na hora.
   dia seguinte em UTC — e na virada do ano, como o ano seguinte.
 - **A FK composta `(category_id, kind)`** faz o banco recusar um gasto vinculado a
   categoria de receita. A coerência não depende de lembrarmos de validar.
-- **Recorrentes são gerados na leitura, sem cron.** O índice único
-  `(recurrence_id, occurred_on)` garante que abrir o mesmo mês duas vezes não
-  lança o salário duas vezes.
 - **Rate limit de autenticação no banco.** Login e cadastro aceitam 10
   tentativas por minuto por IP; redefinição de senha, 3. A contagem fica na
   tabela `rate_limit` (Better Auth com `storage: 'database'`), então o limite é
@@ -74,13 +71,13 @@ npm run dev:app    # Expo: aperte 'w' para web, ou leia o QR no Expo Go
 ## Verificação
 
 ```bash
-npm test           # 82 testes: dinheiro, datas, recorrência
+npm test           # dinheiro, datas, Open Finance e investimentos
 npm run typecheck  # todos os workspaces
 ```
 
 A suíte cobre de propósito os pontos onde um erro custa dinheiro: parsing de
-valores em pt-BR, limites de mês e fuso, e a idempotência da geração de
-recorrentes.
+valores em pt-BR, limites de mês e fuso, a conversão do Open Finance e as
+contas dos investimentos.
 
 ## Cadastro por convite
 
