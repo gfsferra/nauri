@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons'
-import { type ReactNode, useEffect, useRef } from 'react'
+import { type ReactNode, useEffect, useRef, useSyncExternalStore } from 'react'
 import {
   Animated,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,9 +20,31 @@ import { radius, spacing, tabular, type, useTheme } from '@/lib/theme'
 
 /* ─────────────────────────── superfícies ─────────────────────────── */
 
+const noopSubscribe = () => () => {}
+
+/**
+ * App instalado na tela de início (PWA), onde a barra de status fica por
+ * cima da página. Lido no navegador, não no hook de área segura: no PWA o
+ * `SafeAreaView` aplica o inset por CSS, mas `useSafeAreaInsets().top` chega
+ * como 0. Na pré-renderização é sempre falso, como o tema (ver `useTheme`).
+ */
+function useInstalledWebApp(): boolean {
+  return useSyncExternalStore(
+    noopSubscribe,
+    () =>
+      Platform.OS === 'web' &&
+      typeof window !== 'undefined' &&
+      (window.matchMedia?.('(display-mode: standalone)').matches === true ||
+        (window.navigator as { standalone?: boolean }).standalone === true),
+    () => false,
+  )
+}
+
 export function Screen({ children, scroll = false }: { children: ReactNode; scroll?: boolean }) {
   const theme = useTheme()
   const { top } = useSafeAreaInsets()
+  const installed = useInstalledWebApp()
+  const underStatusBar = top > 0 || installed
   const Container = scroll ? ScrollView : View
   return (
     // O inset de topo cobre a barra de status no aparelho, mas no navegador
@@ -30,7 +53,7 @@ export function Screen({ children, scroll = false }: { children: ReactNode; scro
     // (app nativo, ou o PWA no iPhone com a barra translúcida), 12px colava
     // o cabeçalho no relógio, então ali o respiro dobra.
     <SafeAreaView
-      style={{ flex: 1, backgroundColor: theme.bg, paddingTop: top > 0 ? spacing.xl + spacing.sm : spacing.md }}
+      style={{ flex: 1, backgroundColor: theme.bg, paddingTop: underStatusBar ? spacing.xl + spacing.sm : spacing.md }}
       edges={['top']}
     >
       <Container

@@ -1,41 +1,32 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
-import { Alert, Pressable, ScrollView, SectionList, Text, View } from 'react-native'
+import { Alert, Pressable, SectionList, Text, View } from 'react-native'
 import {
   Amount,
-  Avatar,
   Skeleton,
   SkeletonRow,
-  Chip,
   EmptyState,
   ErrorBanner,
   Gutter,
-  InkCard,
   ListGroup,
   Screen,
   SectionLabel,
-  TrustNote,
   mask,
   useTabBarSpace,
   CategoryIcon,
 } from '@/components/ui'
-import { useSession } from '@/lib/auth-client'
 import { client, unwrap } from '@/lib/api'
 import {
   addMonths,
+  capitalize,
   currentMonth,
   formatBRL,
-  formatDate,
   formatMonth,
   monthBounds,
-  percentDelta,
   relativeDay,
-  sinceLabel,
-  toneOf,
 } from '@/lib/format'
-import { inkCard, radius, spacing, tabular, type, useTheme } from '@/lib/theme'
+import { radius, spacing, tabular, type, useTheme } from '@/lib/theme'
 
 type Row = {
   id: string
@@ -55,25 +46,15 @@ type Row = {
 export default function Home() {
   const theme = useTheme()
   const tabBarSpace = useTabBarSpace()
-  const router = useRouter()
   const queryClient = useQueryClient()
-  const { data: session } = useSession()
 
   const [month, setMonth] = useState(currentMonth())
   const [hidden, setHidden] = useState(false)
   const { from, to } = monthBounds(month)
-  const previous = addMonths(month, -1)
 
   const summary = useQuery({
     queryKey: ['summary', month],
     queryFn: async () => unwrap(await client.reports.summary.$get({ query: { month } })),
-  })
-
-  // O DS mostra a variação contra o mês anterior na pílula abaixo do saldo;
-  // é o mesmo endpoint, só com outro mês.
-  const before = useQuery({
-    queryKey: ['summary', previous],
-    queryFn: async () => unwrap(await client.reports.summary.$get({ query: { month: previous } })),
   })
 
   // Mesma chave da seção do Perfil: o cache é um só. Para quem não tem Open
@@ -132,20 +113,12 @@ export default function Home() {
   }, [list.data, summary.data])
 
   // O saldo mostrado já conta o que ainda vai acontecer no mês (o salário a
-  // cair e as contas fixas a cobrar), com aviso logo abaixo: sem isso, todo
-  // começo de mês parece negativo e o fim parece melhor do que é.
+  // cair e as contas fixas a cobrar).
   const forecastIncome = summary.data?.forecastIncomeCents ?? 0
   const forecastExpense = summary.data?.forecastExpenseCents ?? 0
   const projected = (s: { balanceCents: number; forecastIncomeCents: number; forecastExpenseCents: number }) =>
     s.balanceCents + s.forecastIncomeCents - s.forecastExpenseCents
   const balance = summary.data ? projected(summary.data) : 0
-  const delta = summary.data && before.data ? percentDelta(balance, projected(before.data)) : null
-
-  const quickActions = [
-    { key: 'reports', label: 'Relatórios', icon: 'pie-chart-outline', go: () => router.push('/reports') },
-    { key: 'import', label: 'Importar', icon: 'cloud-upload-outline', go: () => router.push('/import') },
-    { key: 'settings', label: 'Perfil', icon: 'person-outline', go: () => router.push('/settings') },
-  ] as const
 
   return (
     <Screen>
@@ -157,20 +130,22 @@ export default function Home() {
         onRefresh={() => {
           list.refetch()
           summary.refetch()
-          before.refetch()
         }}
         contentContainerStyle={{ paddingBottom: tabBarSpace }}
         ListHeaderComponent={
-          <View style={{ gap: spacing.xl, paddingBottom: spacing.lg }}>
-            {/* ── cabeçalho: saudação, inicial e o olho de privacidade ── */}
-            <Gutter style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-              <Avatar name={session?.user.name ?? '?'} tone={toneOf(session?.user.name ?? '')} size={46} />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={{ ...type.body, color: theme.text2 }}>{greeting()},</Text>
-                <Text style={{ fontSize: 17, fontWeight: '600', color: theme.text, marginTop: 1 }}>
-                  {session?.user.name ?? 'Você'}
-                </Text>
-              </View>
+          <View style={{ gap: spacing.xl, paddingBottom: spacing.sm }}>
+            {/* ── o mês e o olho de privacidade ── */}
+            <Gutter style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Pressable onPress={() => setMonth(addMonths(month, -1))} accessibilityLabel="Mês anterior" hitSlop={12}>
+                <Ionicons name="chevron-back" size={20} color={theme.text3} />
+              </Pressable>
+              <Pressable onPress={() => setMonth(currentMonth())} accessibilityLabel="Voltar para o mês atual">
+                <Text style={{ ...type.heading, color: theme.text }}>{capitalize(formatMonth(month))}</Text>
+              </Pressable>
+              <Pressable onPress={() => setMonth(addMonths(month, 1))} accessibilityLabel="Próximo mês" hitSlop={12}>
+                <Ionicons name="chevron-forward" size={20} color={theme.text3} />
+              </Pressable>
+              <View style={{ flex: 1 }} />
               <Pressable
                 onPress={() => setHidden((v) => !v)}
                 accessibilityRole="button"
@@ -179,183 +154,47 @@ export default function Home() {
                 hitSlop={8}
                 style={styles.iconButton}
               >
-                <Ionicons
-                  name={hidden ? 'eye-off-outline' : 'eye-outline'}
-                  size={22}
-                  color={theme.text2}
-                />
+                <Ionicons name={hidden ? 'eye-off-outline' : 'eye-outline'} size={22} color={theme.text2} />
               </Pressable>
             </Gutter>
 
-            {/* ── saldo do mês: o número de 40px que o DS coloca em 0 toques ── */}
+            {/* ── saldo, e de onde ele vem ── */}
             <Gutter>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Pressable
-                  onPress={() => setMonth(addMonths(month, -1))}
-                  accessibilityLabel="Mês anterior"
-                  hitSlop={12}
-                >
-                  <Ionicons name="chevron-back" size={18} color={theme.text3} />
-                </Pressable>
-                <Pressable onPress={() => setMonth(currentMonth())} accessibilityLabel="Voltar para o mês atual">
-                  <Text style={{ ...type.body, color: theme.text2, letterSpacing: 0.2 }}>
-                    Saldo de {formatMonth(month)}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setMonth(addMonths(month, 1))}
-                  accessibilityLabel="Próximo mês"
-                  hitSlop={12}
-                >
-                  <Ionicons name="chevron-forward" size={18} color={theme.text3} />
-                </Pressable>
-              </View>
-
               {/* Esqueleto no lugar do número, na mesma altura: o layout não
                   salta quando o saldo chega (DS, decisão 04). */}
               {summary.data ? (
                 <Text
                   accessibilityLabel={hidden ? 'Saldo oculto' : `Saldo de ${formatBRL(balance)}`}
-                  style={[
-                    type.balance,
-                    tabular,
-                    { color: theme.text, marginTop: 6 },
-                  ]}
+                  style={[type.balance, tabular, { color: theme.text }]}
                 >
                   {mask(formatBRL(balance), hidden)}
                 </Text>
               ) : (
-                <Skeleton width={230} height={38} style={{ marginTop: 8, borderRadius: 10 }} />
+                <Skeleton width={230} height={38} style={{ borderRadius: 10 }} />
               )}
+              {/* O saldo já conta o salário a cair e as contas fixas a cobrar:
+                  sem isso, todo começo de mês parece negativo. Os valores
+                  previstos aparecem na lista, marcados como "previsto". */}
+              <Text style={{ ...type.caption, color: theme.text2, marginTop: 6 }}>
+                {forecastIncome > 0 || forecastExpense > 0 ? 'Saldo previsto para o fim do mês' : 'Saldo do mês'}
+              </Text>
 
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 }}>
-                {delta === null ? null : (
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 5,
-                      paddingVertical: 5,
-                      paddingHorizontal: 9,
-                      borderRadius: radius.full,
-                      backgroundColor: delta >= 0 ? theme.positiveSoft : theme.surface2,
-                    }}
-                  >
-                    <Ionicons
-                      name={delta >= 0 ? 'trending-up' : 'trending-down'}
-                      size={12}
-                      color={delta >= 0 ? theme.positive : theme.text2}
-                    />
-                    {/* O sinal acompanha a cor: a seta e o + / − dizem a direção
-                        sozinhos, para quem não separa os dois tons. */}
-                    <Text
-                      style={{
-                        ...type.caption,
-                        ...tabular,
-                        fontWeight: '600',
-                        color: delta >= 0 ? theme.positive : theme.text2,
-                      }}
-                    >
-                      {delta >= 0 ? '+' : '−'}
-                      {Math.abs(delta).toFixed(1).replace('.', ',')}%
-                    </Text>
-                  </View>
-                )}
-                <Text style={{ ...type.caption, color: theme.text2 }}>vs. {formatMonth(previous)}</Text>
-              </View>
-              {forecastIncome > 0 || forecastExpense > 0 ? (
-                <Text style={{ ...type.caption, color: theme.text2, marginTop: 8 }}>
-                  Inclui previsões:
-                  {forecastIncome > 0 ? (
-                    <>
-                      {' '}+{' '}
-                      <Text style={tabular}>{mask(formatBRL(forecastIncome), hidden)}</Text> de
-                      salário
-                    </>
-                  ) : null}
-                  {forecastIncome > 0 && forecastExpense > 0 ? ' ·' : null}
-                  {forecastExpense > 0 ? (
-                    <>
-                      {' '}−{' '}
-                      <Text style={tabular}>{mask(formatBRL(forecastExpense), hidden)}</Text> de
-                      contas fixas
-                    </>
-                  ) : null}
-                </Text>
-              ) : null}
-            </Gutter>
-
-            {/* ── ações rápidas: o carrossel de pílulas do DS ── */}
-            {/* Carrossel, não grade: o DS rola as ações na horizontal, então
-                uma ação a mais nunca abre uma segunda linha órfã. */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 10, paddingHorizontal: spacing.gutter }}
-            >
-              {quickActions.map((action) => (
-                <Chip
-                  key={action.key}
-                  label={action.label}
-                  active={false}
-                  accessibilityRole="button"
-                  onPress={action.go}
-                  leading={<Ionicons name={action.icon} size={17} color={theme.accent} />}
+              <View style={{ flexDirection: 'row', gap: spacing.xl, marginTop: spacing.lg }}>
+                <Flow
+                  label="Entradas"
+                  icon="arrow-up"
+                  tint={theme.positive}
+                  cents={summary.data ? summary.data.incomeCents + forecastIncome : null}
+                  hidden={hidden}
                 />
-              ))}
-            </ScrollView>
-
-            {/* ── o cartão de tinta: entradas e saídas do mês ── */}
-            <Gutter>
-              <InkCard>
-                <Text style={{ ...type.overline, color: inkCard.textSoft, letterSpacing: 1.4 }}>
-                  Resumo de {formatMonth(month)}
-                </Text>
-                <View style={{ flexDirection: 'row', gap: spacing.xl, marginTop: spacing.lg }}>
-                  <View style={{ flex: 1, gap: 4 }}>
-                    <Text style={{ ...type.caption, color: inkCard.textSoft }}>Entradas</Text>
-                    {summary.data ? (
-                      <Text
-                        style={[
-                          { fontSize: 19, fontWeight: '600', color: inkCard.text },
-                          tabular,
-                        ]}
-                      >
-                        + {mask(formatBRL(summary.data.incomeCents + forecastIncome), hidden)}
-                      </Text>
-                    ) : (
-                      <Skeleton width="70%" height={16} />
-                    )}
-                    {forecastIncome > 0 ? (
-                      <Text style={{ ...type.caption, color: inkCard.textSoft }}>
-                        <Text style={tabular}>{mask(formatBRL(forecastIncome), hidden)}</Text>{' '}
-                        previsto
-                      </Text>
-                    ) : null}
-                  </View>
-                  <View style={{ flex: 1, gap: 4 }}>
-                    <Text style={{ ...type.caption, color: inkCard.textSoft }}>Saídas</Text>
-                    {summary.data ? (
-                      <Text
-                        style={[
-                          { fontSize: 19, fontWeight: '600', color: inkCard.text },
-                          tabular,
-                        ]}
-                      >
-                        − {mask(formatBRL(summary.data.expenseCents + forecastExpense), hidden)}
-                      </Text>
-                    ) : (
-                      <Skeleton width="70%" height={16} delay={100} />
-                    )}
-                    {forecastExpense > 0 ? (
-                      <Text style={{ ...type.caption, color: inkCard.textSoft }}>
-                        <Text style={tabular}>{mask(formatBRL(forecastExpense), hidden)}</Text>{' '}
-                        previsto
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-              </InkCard>
+                <Flow
+                  label="Saídas"
+                  icon="arrow-down"
+                  tint={theme.text2}
+                  cents={summary.data ? summary.data.expenseCents + forecastExpense : null}
+                  hidden={hidden}
+                />
+              </View>
             </Gutter>
 
             {/* ── fatura em aberto do cartão (Open Finance) ── */}
@@ -390,21 +229,15 @@ export default function Home() {
                       </View>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={{ ...type.row, color: theme.text }} numberOfLines={1}>
-                          Fatura atual · {card.bank}
+                          Fatura {card.bank}
                         </Text>
-                        {/* A Pluggy atualiza uma vez por dia: o "atualizada há" explica a
-                            diferença para o app do banco, que mostra a compra de agora há pouco. */}
-                        <Text style={{ ...type.caption, color: theme.text2, marginTop: 2 }} numberOfLines={2}>
-                          Vence em {formatDate(card.billDueOn)}
-                          {card.billUpdatedAt ? ` · atualizada ${sinceLabel(card.billUpdatedAt)}` : ''}
+                        {/* Quando a Pluggy leu a fatura fica no Open Finance do Perfil:
+                            aqui, só o que importa para pagar. */}
+                        <Text style={{ ...type.caption, color: theme.text2, marginTop: 2 }} numberOfLines={1}>
+                          Vence em {card.billDueOn.slice(8, 10)}/{card.billDueOn.slice(5, 7)}
                         </Text>
                       </View>
-                      <Text
-                        style={[
-                          { ...type.row, fontWeight: '600', color: theme.text },
-                          tabular,
-                        ]}
-                      >
+                      <Text style={[{ ...type.row, fontWeight: '600', color: theme.text }, tabular]}>
                         {mask(formatBRL(card.billAmountCents), hidden)}
                       </Text>
                     </View>
@@ -415,14 +248,7 @@ export default function Home() {
 
             <Gutter style={{ gap: spacing.md }}>
               <ErrorBanner message={list.error?.message ?? summary.error?.message} />
-              <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                <Text style={{ ...type.section, color: theme.text }}>Lançamentos</Text>
-                <Pressable onPress={() => router.push('/reports')} hitSlop={8}>
-                  <Text style={{ ...type.body, fontWeight: '600', color: theme.accentText }}>
-                    Ver relatórios
-                  </Text>
-                </Pressable>
-              </View>
+              <Text style={{ ...type.section, color: theme.text }}>Lançamentos</Text>
             </Gutter>
           </View>
         }
@@ -483,30 +309,41 @@ export default function Home() {
             </Gutter>
           </Pressable>
         )}
-        ListFooterComponent={
-          sections.length ? (
-            <Gutter>
-              <TrustNote icon={<Ionicons name="lock-closed-outline" size={13} color={theme.text3} />}>
-                Seus dados ficam só na sua conta
-              </TrustNote>
-            </Gutter>
-          ) : null
-        }
       />
     </Screen>
   )
 }
 
-function greeting(): string {
-  // A hora sai em en-US/h23 e passa por parseInt: o padrão pt-BR varia entre
-  // motores ICU (há os que devolvem "14 h"), e Number() disso é NaN.
-  const hour = parseInt(
-    new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Sao_Paulo' })
-      .format(new Date()),
-    10,
+/** Entradas ou saídas do mês: rótulo pequeno, seta e o valor. */
+function Flow({
+  label,
+  icon,
+  tint,
+  cents,
+  hidden,
+}: {
+  label: string
+  icon: 'arrow-up' | 'arrow-down'
+  tint: string
+  cents: number | null
+  hidden: boolean
+}) {
+  const theme = useTheme()
+  return (
+    <View style={{ gap: 3 }}>
+      <Text style={{ ...type.caption, color: theme.text2 }}>{label}</Text>
+      {cents === null ? (
+        <Skeleton width={96} height={14} style={{ marginTop: 3 }} />
+      ) : (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Ionicons name={icon} size={14} color={tint} />
+          <Text style={[{ fontSize: 16, fontWeight: '600', letterSpacing: -0.2, color: theme.text }, tabular]}>
+            {mask(formatBRL(cents), hidden)}
+          </Text>
+        </View>
+      )}
+    </View>
   )
-  if (hour < 12) return 'Bom dia'
-  return hour < 18 ? 'Boa tarde' : 'Boa noite'
 }
 
 const styles = {
