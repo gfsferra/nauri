@@ -102,7 +102,7 @@ export const investmentsRoute = new Hono<AppContext>()
         .groupBy(sql`to_char(${budgetDate}, 'YYYY-MM')`),
     ])
 
-    const portfolio = portfolioSummary(rows)
+    const portfolio = portfolioSummary(rows, today)
     // Quando o banco atualizou os números, não quando o Nauri os leu: a leitura
     // é de hora em hora, mas o dado é o da atualização diária da Pluggy. Vale
     // a conexão mais atrasada, para "há 2 h" não esconder uma parada.

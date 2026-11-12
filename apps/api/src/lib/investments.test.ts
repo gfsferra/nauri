@@ -14,6 +14,7 @@ import {
   savingsRate,
   savingsSummary,
   signedCents,
+  taxSchedule,
   type PluggyInvestment,
   type PluggyInvestmentTransaction,
 } from './investments.js'
@@ -439,5 +440,106 @@ describe('monthYield', () => {
       { day: '2026-11-30', investmentsCents: 97000 },
     ]
     expect(monthYield(snaps, [], '2026-11')!.yieldCents).toBe(-3000)
+  })
+})
+
+describe('taxSchedule', () => {
+  const cdb = (purchaseOn: string | null) => ({ type: 'FIXED_INCOME', subtype: 'CDB', purchaseOn })
+
+  it('no dia da compra: 22,5% de IR, IOF por 30 dias e queda no 181º dia', () => {
+    expect(taxSchedule(cdb('2026-01-01'), '2026-01-01')).toEqual({
+      days: 0,
+      irRate: 22.5,
+      next: { rate: 20, on: '2026-07-01', inDays: 181 },
+      iofUntil: '2026-01-31',
+    })
+  })
+
+  it('a faixa muda no dia seguinte ao último dia dela', () => {
+    expect(taxSchedule(cdb('2026-01-01'), '2026-06-30')!.irRate).toBe(22.5) // 180 dias
+    expect(taxSchedule(cdb('2026-01-01'), '2026-07-01')!.irRate).toBe(20) // 181 dias
+    expect(taxSchedule(cdb('2026-01-01'), '2026-12-27')!).toMatchObject({ days: 360, irRate: 20 })
+    expect(taxSchedule(cdb('2026-01-01'), '2026-12-28')!).toMatchObject({ days: 361, irRate: 17.5 })
+  })
+
+  it('IOF zera no 30º dia', () => {
+    expect(taxSchedule(cdb('2026-01-01'), '2026-01-30')!.iofUntil).toBe('2026-01-31')
+    expect(taxSchedule(cdb('2026-01-01'), '2026-01-31')!.iofUntil).toBeNull()
+  })
+
+  it('depois de 720 dias fica nos 15%, sem próxima queda', () => {
+    expect(taxSchedule(cdb('2024-01-01'), '2026-11-11')).toMatchObject({ irRate: 15, next: null, iofUntil: null })
+  })
+
+  it('isentos e sem data de compra ficam de fora', () => {
+    expect(taxSchedule({ type: 'FIXED_INCOME', subtype: 'LCI', purchaseOn: '2026-01-01' }, '2026-02-01')).toBeNull()
+    expect(taxSchedule({ type: 'FIXED_INCOME', subtype: 'DEBENTURE', purchaseOn: '2026-01-01' }, '2026-02-01')).toBeNull()
+    expect(taxSchedule({ type: 'ETF', subtype: 'ETF', purchaseOn: '2026-01-01' }, '2026-02-01')).toBeNull()
+    expect(taxSchedule(cdb(null), '2026-02-01')).toBeNull()
+    expect(taxSchedule(cdb('2026-03-01'), '2026-02-01')).toBeNull()
+  })
+})
+
+describe('portfolioSummary: quedas de imposto', () => {
+  const row = (over: Record<string, unknown>) => ({
+    externalId: 'x',
+    type: 'FIXED_INCOME',
+    subtype: 'CDB',
+    name: 'CDB',
+    code: null,
+    issuer: NU,
+    status: 'ACTIVE',
+    balanceCents: 110000,
+    grossCents: 112000,
+    costCents: 100000,
+    quantity: null,
+    rate: 100,
+    rateType: 'CDI',
+    fixedAnnualRate: null,
+    dueOn: '2028-01-01',
+    purchaseOn: '2026-01-01',
+    ...over,
+  })
+
+  it('IR que cai em até 30 dias vira aviso, com o IR que deixa de pagar sobre o ganho', () => {
+    // Em 2026-06-15 faltam 16 dias para os 181: 22,5% → 20% sobre 120,00 de ganho = 3,00.
+    const s = portfolioSummary([row({})], '2026-06-15')
+    expect(s.taxDrops).toEqual([
+      { id: 'x', name: 'CDB Nubank', kind: 'ir', on: '2026-07-01', inDays: 16, fromRate: 22.5, toRate: 20, savingsCents: 300 },
+    ])
+    expect(s.positions[0]!.tax).toMatchObject({ irRate: 22.5, next: { rate: 20, on: '2026-07-01' } })
+  })
+
+  it('queda distante não vira aviso, mas fica na posição', () => {
+    const s = portfolioSummary([row({})], '2026-03-01')
+    expect(s.taxDrops).toEqual([])
+    expect(s.positions[0]!.tax!.next!.on).toBe('2026-07-01')
+  })
+
+  it('IOF ainda ativo vira aviso; o mais próximo primeiro', () => {
+    const s = portfolioSummary(
+      [row({ externalId: 'novo', purchaseOn: '2026-06-10' }), row({ externalId: 'velho' })],
+      '2026-06-15',
+    )
+    expect(s.taxDrops.map((d) => [d.id, d.kind, d.on, d.inDays])).toEqual([
+      ['velho', 'ir', '2026-07-01', 16],
+      ['novo', 'iof', '2026-07-10', 25],
+    ])
+  })
+
+  it('IOF: a economia é o imposto de hoje menos o IR que fica', () => {
+    // Ganho de 10,00; o banco desconta 7,25 (IR de 22,5% = 2,25 + IOF de 5,00).
+    const s = portfolioSummary(
+      [row({ balanceCents: 200275, grossCents: 201000, costCents: 200000, purchaseOn: '2026-10-30' })],
+      '2026-11-11',
+    )
+    expect(s.taxDrops).toEqual([
+      { id: 'x', name: 'CDB Nubank', kind: 'iof', on: '2026-11-29', inDays: 18, fromRate: null, toRate: null, savingsCents: 500 },
+    ])
+  })
+
+  it('sem custo conhecido o aviso sai sem a economia', () => {
+    const s = portfolioSummary([row({ costCents: null })], '2026-06-15')
+    expect(s.taxDrops[0]!.savingsCents).toBeNull()
   })
 })
