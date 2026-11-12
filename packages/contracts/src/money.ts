@@ -24,8 +24,8 @@ const MAX_CENTS = 1_000_000_000_000
  *
  * Sobra um caso genuinamente ambíguo: um separador só, com exatamente três
  * dígitos depois ("1.234"). Aqui isso é lido como milhar, que é a leitura certa
- * numa planilha brasileira. Como a heurística pode errar, a tela de importação
- * mostra o preview e deixa forçar o locale.
+ * numa planilha brasileira. Como a heurística pode errar, quem conhece a
+ * origem do texto passa o locale em vez de `auto`.
  */
 export function safeParseAmountToCents(
   raw: string,

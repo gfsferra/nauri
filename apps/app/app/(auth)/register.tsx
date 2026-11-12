@@ -60,7 +60,7 @@ export default function Register() {
           </BrandMark>
           <View style={{ gap: 6 }}>
             <Title>Criar conta</Title>
-            <Muted>Leva um minuto. Depois dá para importar sua planilha inteira.</Muted>
+            <Muted>Leva um minuto.</Muted>
           </View>
         </View>
 

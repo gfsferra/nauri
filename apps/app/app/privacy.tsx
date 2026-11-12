@@ -23,7 +23,6 @@ const sections: LegalSection[] = [
         list: [
           'Dados de cadastro: nome, e-mail e senha. A senha nunca é guardada como texto: guardamos apenas um resumo criptográfico (hash) dela, que não permite recuperá-la.',
           'Dados financeiros que você mesmo registra: lançamentos (valor, data, descrição e categoria) e categorias.',
-          'Planilhas importadas: o arquivo é lido no seu próprio aparelho e nunca é enviado aos nossos servidores. Só os lançamentos que você confirma na importação são gravados.',
           'Dados técnicos de acesso: endereço IP e identificação do navegador ou aparelho (user agent) de cada sessão aberta, e o endereço IP usado para limitar tentativas de login.',
           'Registros técnicos do servidor (data, hora, endereço acessado e resultado de cada requisição), usados para diagnosticar falhas e ataques.',
         ],
@@ -89,7 +88,7 @@ const sections: LegalSection[] = [
       'Parte disso você faz sozinho, dentro do app:',
       {
         list: [
-          'Perfil → Exportar meus dados: baixa todos os seus lançamentos em uma planilha (CSV).',
+          'Perfil → ícone de download, ao lado do seu nome: baixa todos os seus lançamentos em uma planilha (CSV).',
           'Perfil → Excluir minha conta: apaga a conta e todos os dados de forma definitiva.',
         ],
       },

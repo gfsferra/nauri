@@ -123,6 +123,24 @@ export default function Settings() {
                 </Text>
               ) : null}
             </View>
+            {/* Exportar ficou para quem quiser os dados fora do app (LGPD,
+                portabilidade): um ícone discreto em vez de uma seção inteira. */}
+            <Pressable
+              onPress={handleExport}
+              accessibilityRole="button"
+              accessibilityLabel="Exportar meus dados (CSV)"
+              hitSlop={8}
+              style={({ pressed }) => ({
+                width: 40,
+                height: 40,
+                borderRadius: radius.md,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: pressed ? theme.surface2 : 'transparent',
+              })}
+            >
+              <Ionicons name="download-outline" size={19} color={theme.text3} />
+            </Pressable>
           </Gutter>
         </Rise>
 
@@ -153,30 +171,8 @@ export default function Settings() {
           </Gutter>
         </Rise>
 
-        {/* ── seus dados ── */}
-        <Rise index={3}>
-          <Gutter style={{ gap: spacing.sm }}>
-            <SectionLabel>Seus dados</SectionLabel>
-            <ListGroup>
-              <ListRow
-                icon={tile('cloud-upload-outline')}
-                label="Importar planilha"
-                detail="CSV"
-                onPress={() => router.push('/import')}
-              />
-              <ListRow
-                icon={tile('download-outline')}
-                label="Exportar meus dados"
-                detail="CSV"
-                onPress={handleExport}
-                last
-              />
-            </ListGroup>
-          </Gutter>
-        </Rise>
-
         {/* ── conta ── */}
-        <Rise index={4}>
+        <Rise index={3}>
           <Gutter style={{ gap: spacing.sm }}>
             <SectionLabel>Conta</SectionLabel>
             <ListGroup>
