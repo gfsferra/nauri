@@ -66,7 +66,7 @@ export function lastDayOfMonth(year: number, month: number): number {
 
 /**
  * Encaixa um dia no mês: "todo dia 31" em fevereiro vira o dia 28 (ou 29).
- * Sem isso, uma recorrência mensal com dia 31 sumiria em sete meses do ano.
+ * Sem isso, uma previsão para o dia 31 sumiria em sete meses do ano.
  */
 export function clampDayToMonth(year: number, month: number, day: number): number {
   return Math.min(day, lastDayOfMonth(year, month))

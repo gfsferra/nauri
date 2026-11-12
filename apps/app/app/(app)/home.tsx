@@ -46,7 +46,6 @@ type Row = {
   categoryName: string
   categoryColor: string
   categoryIcon?: string | null
-  recurrenceId: string | null
   /** Compra do cartão que ainda não fechou na fatura (veio do Open Finance). */
   isPending?: boolean
   /** Salário ou conta fixa prevista que ainda não aconteceu: calculado, não é lançamento. */
@@ -120,7 +119,6 @@ export default function Home() {
       categoryName: f.categoryName,
       categoryColor: f.categoryColor ?? '',
       categoryIcon: f.categoryIcon,
-      recurrenceId: null,
       isForecast: true,
     }))
     for (const row of [...((list.data?.items ?? []) as Row[]), ...forecastRows]) {
@@ -472,7 +470,6 @@ export default function Home() {
                 </Text>
                 <Text style={{ ...type.caption, color: theme.text2, marginTop: 2 }} numberOfLines={1}>
                   {item.categoryName}
-                  {item.recurrenceId ? ' · recorrente' : ''}
                   {item.isPending ? ' · pendente' : ''}
                   {item.isForecast ? ' · previsto' : ''}
                 </Text>

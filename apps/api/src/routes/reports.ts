@@ -10,7 +10,6 @@ import { bankAccounts, budgetDate, categories, transactions } from '../db/schema
 import type { AppContext } from '../env.js'
 import { addDays, addMonthsToMonth, currentMonth, monthBounds, todayInTimezone } from '@nauri/contracts'
 import { toCents } from '../lib/cents.js'
-import { materializeRecurrences } from '../lib/materialize.js'
 import { forecastExpensesForMonth, RECURRING_LOOKBACK_DAYS, recurringSeries } from '../lib/recurring-forecast.js'
 import { forecastForMonth, LOOKBACK_DAYS, salarySlots } from '../lib/salary-forecast.js'
 import type { Db } from '../db/client.js'
@@ -29,10 +28,6 @@ export const reportsRoute = new Hono<AppContext>()
   .get('/summary', zValidator('query', summaryQuerySchema), async (c) => {
     const { month } = c.req.valid('query')
     const { from, to } = monthBounds(month)
-
-    // O total do mês precisa já contar o salário e as contas fixas, mesmo que
-    // ninguém tenha aberto a lista de lançamentos ainda.
-    await materializeRecurrences(c.get('db'), c.get('userId'), from, to)
 
     const [row] = await c
       .get('db')
@@ -161,8 +156,8 @@ export const reportsRoute = new Hono<AppContext>()
   })
 
 /**
- * Salário previsto do mês (ver `lib/salary-forecast.ts`). Só olha salários
- * que vieram do banco (Open Finance): quem lança à mão já tem a recorrência.
+ * Salário previsto do mês (ver `lib/salary-forecast.ts`), pelos salários que
+ * vieram do banco (Open Finance).
  */
 async function salaryForecast(db: Db, userId: string, month: string) {
   const today = todayInTimezone()

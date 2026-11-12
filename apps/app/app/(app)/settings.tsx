@@ -122,7 +122,7 @@ export default function Settings() {
   function handleDelete() {
     Alert.alert(
       'Excluir conta',
-      'Todos os seus lançamentos, categorias e orçamentos serão apagados definitivamente. Exporte seus dados antes, se quiser guardá-los.',
+      'Todos os seus lançamentos, categorias e investimentos serão apagados definitivamente. Exporte seus dados antes, se quiser guardá-los.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {

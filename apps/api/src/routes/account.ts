@@ -2,7 +2,7 @@ import { zValidator } from '@hono/zod-validator'
 import { asc, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { budgets, categories, recurrences, transactions, user } from '../db/schema.js'
+import { categories, transactions, user } from '../db/schema.js'
 import type { AppContext } from '../env.js'
 import { centsToDecimalString } from '@nauri/contracts'
 import { requireAuth } from '../middleware.js'
@@ -29,15 +29,13 @@ export const accountRoute = new Hono<AppContext>()
         .where(eq(user.id, userId))
         .limit(1)
 
-      const [myCategories, myTransactions, myRecurrences, myBudgets] = await Promise.all([
+      const [myCategories, myTransactions] = await Promise.all([
         db.select().from(categories).where(eq(categories.userId, userId)),
         db
           .select()
           .from(transactions)
           .where(eq(transactions.userId, userId))
           .orderBy(asc(transactions.occurredOn)),
-        db.select().from(recurrences).where(eq(recurrences.userId, userId)),
-        db.select().from(budgets).where(eq(budgets.userId, userId)),
       ])
 
       if (c.req.valid('query').format === 'csv') {
@@ -67,8 +65,6 @@ export const accountRoute = new Hono<AppContext>()
         usuario: me,
         categorias: myCategories,
         lancamentos: myTransactions,
-        recorrencias: myRecurrences,
-        orcamentos: myBudgets,
       })
     },
   )

@@ -119,7 +119,6 @@ export const rateLimit = pgTable(
 
 /** O que substitui as duas colunas da planilha por uma tabela só. */
 export const kindEnum = pgEnum('kind', ['expense', 'income'])
-export const frequencyEnum = pgEnum('frequency', ['monthly', 'weekly', 'yearly'])
 
 export const categories = pgTable(
   'categories',
@@ -139,42 +138,10 @@ export const categories = pgTable(
     // "Mercado" e "mercado" são a mesma categoria — a importação depende disso
     // para não criar duplicata a cada variação de caixa vinda da planilha.
     uniqueIndex('categories_user_kind_name_uq').on(t.userId, t.kind, sql`lower(${t.name})`),
-    // Alvo da FK composta em transactions/recurrences. Redundante como chave,
+    // Alvo da FK composta em transactions. Redundante como chave,
     // essencial como referência.
     unique('categories_id_kind_uq').on(t.id, t.kind),
     index('categories_user_idx').on(t.userId),
-  ],
-)
-
-export const recurrences = pgTable(
-  'recurrences',
-  {
-    id: uuid('id').primaryKey().default(sql`uuidv7()`),
-    userId: text('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
-    kind: kindEnum('kind').notNull(),
-    categoryId: uuid('category_id').notNull(),
-    description: text('description').notNull(),
-    amountCents: bigint('amount_cents', { mode: 'number' }).notNull(),
-    frequency: frequencyEnum('frequency').notNull(),
-    dayOfMonth: smallint('day_of_month'),
-    weekday: smallint('weekday'),
-    monthOfYear: smallint('month_of_year'),
-    startOn: date('start_on').notNull(),
-    endOn: date('end_on'),
-    isActive: boolean('is_active').notNull().default(true),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.categoryId, t.kind],
-      foreignColumns: [categories.id, categories.kind],
-      name: 'recurrences_category_kind_fk',
-    }),
-    index('recurrences_user_active_idx').on(t.userId, t.isActive),
-    check('recurrences_amount_positive', sql`${t.amountCents} > 0`),
-    check('recurrences_period', sql`${t.endOn} IS NULL OR ${t.endOn} >= ${t.startOn}`),
   ],
 )
 
@@ -196,9 +163,6 @@ export const transactions = pgTable(
     amountCents: bigint('amount_cents', { mode: 'number' }).notNull(),
     description: text('description').notNull().default(''),
     categoryId: uuid('category_id').notNull(),
-    recurrenceId: uuid('recurrence_id').references(() => recurrences.id, {
-      onDelete: 'set null',
-    }),
     /** ID da transação na Pluggy, quando veio do Open Finance. */
     externalId: text('external_id'),
     bankAccountId: uuid('bank_account_id').references(() => bankAccounts.id, {
@@ -231,10 +195,6 @@ export const transactions = pgTable(
       foreignColumns: [categories.id, categories.kind],
       name: 'transactions_category_kind_fk',
     }),
-    // Idempotência da geração de recorrentes: duas requisições simultâneas
-    // abrindo o mesmo mês não conseguem lançar o salário duas vezes.
-    // NULLs são distintos no Postgres, então lançamentos manuais não colidem.
-    uniqueIndex('transactions_recurrence_occurrence_uq').on(t.recurrenceId, t.occurredOn),
     // Idempotência do Open Finance: a mesma transação do banco nunca entra
     // duas vezes, nem com duas sincronizações rodando ao mesmo tempo. NULLs são
     // distintos, então lançamentos manuais não colidem.
@@ -243,28 +203,6 @@ export const transactions = pgTable(
     index('transactions_user_budget_idx').on(t.userId, sql`coalesce(${t.budgetOn}, ${t.occurredOn})`),
     index('transactions_user_category_idx').on(t.userId, t.categoryId),
     check('transactions_amount_positive', sql`${t.amountCents} > 0`),
-  ],
-)
-
-export const budgets = pgTable(
-  'budgets',
-  {
-    id: uuid('id').primaryKey().default(sql`uuidv7()`),
-    userId: text('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
-    categoryId: uuid('category_id')
-      .notNull()
-      .references(() => categories.id, { onDelete: 'cascade' }),
-    /** Sempre o dia 1 do mês de competência. */
-    month: date('month').notNull(),
-    limitCents: bigint('limit_cents', { mode: 'number' }).notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    unique('budgets_user_category_month_uq').on(t.userId, t.categoryId, t.month),
-    check('budgets_limit_positive', sql`${t.limitCents} > 0`),
-    check('budgets_month_is_first_day', sql`date_part('day', ${t.month}) = 1`),
   ],
 )
 
@@ -459,8 +397,6 @@ export const wealthSnapshots = pgTable(
 export type User = typeof user.$inferSelect
 export type Category = typeof categories.$inferSelect
 export type Transaction = typeof transactions.$inferSelect
-export type Recurrence = typeof recurrences.$inferSelect
-export type Budget = typeof budgets.$inferSelect
 
 /** A data que vale para somas por mês: `budget_on` quando houver, senão `occurred_on`. */
 export const budgetDate = sql<string>`coalesce(${transactions.budgetOn}, ${transactions.occurredOn})`

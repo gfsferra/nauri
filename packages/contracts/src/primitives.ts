@@ -30,7 +30,7 @@ export const isoDateSchema = z
   }, 'Data inexistente no calendário')
 export type IsoDate = z.infer<typeof isoDateSchema>
 
-/** Competência mensal (AAAA-MM), usada em orçamentos e relatórios. */
+/** Competência mensal (AAAA-MM), usada nos relatórios. */
 export const monthSchema = z
   .string()
   .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Mês deve estar no formato AAAA-MM')

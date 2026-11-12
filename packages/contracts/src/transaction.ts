@@ -31,7 +31,6 @@ export const transactionSchema = z.object({
   amountCents: z.number().int(),
   description: z.string(),
   categoryId: uuidSchema,
-  recurrenceId: uuidSchema.nullable(),
 })
 
 export const transactionListQuerySchema = z.object({
